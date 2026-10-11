@@ -1,8 +1,17 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
 }
+
+// Release signing comes from keystore.properties in the project root (git-ignored; see keystore.properties.example).
+// Without it, release falls back to the debug key so local installs still work, and the build says so.
+val releaseKeystore: Properties? = rootProject.file("keystore.properties").takeIf { it.exists() }?.let { file ->
+    Properties().apply { file.inputStream().use { load(it) } }
+}
+if (releaseKeystore == null) logger.warn("keystore.properties not found: release APK is signed with the debug key. Do not distribute it.")
 
 android {
     namespace = "com.example.encryptedvault"
@@ -19,6 +28,16 @@ android {
     // Lets MigrationTestHelper read the exported Room schemas in instrumented tests.
     sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
     buildFeatures { compose = true; buildConfig = true }
+    signingConfigs {
+        releaseKeystore?.let { props ->
+            create("release") {
+                storeFile = rootProject.file(props.getProperty("storeFile"))
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+            }
+        }
+    }
     buildTypes {
         debug { buildConfigField("boolean", "HARDENED", "false") }
         release {
@@ -28,9 +47,7 @@ android {
             isDebuggable = false
             buildConfigField("boolean", "HARDENED", "true")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Local testing only: sign with the debug key so the release build can be installed. Replace with your own
-            // release keystore (kept off this machine's repo) before distributing the APK anywhere.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (releaseKeystore != null) "release" else "debug")
         }
     }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }

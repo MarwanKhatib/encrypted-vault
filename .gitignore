@@ -10,4 +10,5 @@ captures/
 graphify-out/
 *.keystore
 *.jks
+keystore.properties
 .DS_Store
