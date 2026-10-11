@@ -315,7 +315,7 @@ This list is the actual acceptance bar — treat it as a checklist to run throug
 | 9 | Revoke photo permission | **Not applicable.** The app holds no storage permission (photos come through the system picker). |
 | 10 | `adb backup` gives nothing | **Pass.** Output 0 bytes. |
 | 11 | Schema migration keeps photos decryptable | **Pass.** `DatabaseMigrationTest` v1→v5 passes, and `photoWrittenBeforeTheMigrationStillDecryptsAfterIt` decrypts both content and metadata after the v4→v5 upgrade. |
-| 12 | HEIC and MP4 thumbnails render | **Partly.** MP4 passes (`mp4VideoGetsADurationAndAFrame`, sample recorded with `screenrecord`). HEIC is **not run**: no HEIC sample exists on this emulator, and the SDK has no HEIF encoder. Put a real HEIC at `cacheDir/sample.heic` to run it. |
+| 12 | HEIC and MP4 thumbnails render | **Pass.** MP4: `mp4VideoGetsADurationAndAFrame` (sample recorded with `screenrecord`). HEIC: `heicPhotoGetsAThumbnail` with a full 1.4 MB HEIC photo (ftypheic) on the emulator. The two HEIC files in the Go module cache are header-only fixtures and do not decode, so they are not valid samples. |
 | 13 | No StrongBox → TEE fallback | **Pass by evidence.** This emulator has no StrongBox; the key setup and unlock tests pass through the fallback path. |
 
 Re-run with `scripts/device-checks.sh unit | drill-kill | drill-reboot | recents`.
