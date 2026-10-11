@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import androidx.work.CoroutineWorker
 import androidx.work.Data
+import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -16,6 +17,7 @@ import com.example.encryptedvault.data.VaultDatabase
 import com.example.encryptedvault.data.VaultRepository
 import com.example.encryptedvault.data.VaultStorage
 import kotlinx.coroutines.flow.first
+import java.util.UUID
 import com.example.encryptedvault.media.SourceInfo
 import com.example.encryptedvault.media.Thumbnails
 import com.example.encryptedvault.ui.settings.AppSettings
@@ -100,6 +102,39 @@ class ImportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             .putLongArray(KEY_TAKEN_AT, files.map { it.info.takenAt }.toLongArray())
             .build()
 
+        /**
+         * Splits [files] into batches whose worker input stays well under WorkManager's 10 KB Data limit. A fixed count is not
+         * enough: long names and folders push a large selection over the limit and the import crashes.
+         */
+        internal fun batchesOf(
+            files: List<com.example.encryptedvault.media.MediaTransfer.StagedFile>,
+            budgetBytes: Int = INPUT_BUDGET_BYTES,
+        ): List<List<com.example.encryptedvault.media.MediaTransfer.StagedFile>> {
+            val batches = mutableListOf<MutableList<com.example.encryptedvault.media.MediaTransfer.StagedFile>>()
+            var used = 0
+            for (file in files) {
+                val cost = file.path.utf8Size() + file.info.name.utf8Size() + file.info.folder.orEmpty().utf8Size() + PER_FILE_OVERHEAD_BYTES
+                if (batches.isEmpty() || used + cost > budgetBytes) {
+                    batches.add(mutableListOf())
+                    used = 0
+                }
+                batches.last().add(file)
+                used += cost
+            }
+            return batches
+        }
+
+        /**
+         * Queues [files] as a chain of batches under one unique name, so they run one after another and a second selection
+         * appends to the same chain. Returns the batch ids in order; empty when there is nothing to import.
+         */
+        fun enqueueBatches(context: Context, files: List<com.example.encryptedvault.media.MediaTransfer.StagedFile>): List<UUID> {
+            val requests = batchesOf(files).map { OneTimeWorkRequestBuilder<ImportWorker>().setInputData(inputFor(it)).build() }
+            if (requests.isEmpty()) return emptyList()
+            WorkManager.getInstance(context).beginUniqueWork(CHAIN_NAME, ExistingWorkPolicy.APPEND, requests).enqueue()
+            return requests.map { it.id }
+        }
+
         /** Imports [staged] through this worker and suspends until it finishes; true when it succeeded. */
         suspend fun importAndWait(context: Context, staged: com.example.encryptedvault.media.MediaTransfer.StagedFile): Boolean {
             val request = OneTimeWorkRequestBuilder<ImportWorker>().setInputData(inputFor(listOf(staged))).build()
@@ -108,5 +143,12 @@ class ImportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             val info = workManager.getWorkInfoByIdFlow(request.id).first { it != null && it.state.isFinished }
             return info?.state == WorkInfo.State.SUCCEEDED
         }
+
+        private fun String.utf8Size() = toByteArray(Charsets.UTF_8).size
+
+        /** WorkManager rejects input over 10 KB; keep headroom for the keys and the encoding overhead. */
+        private const val INPUT_BUDGET_BYTES = 8 * 1024
+        private const val PER_FILE_OVERHEAD_BYTES = 64
+        private const val CHAIN_NAME = "import"
     }
 }

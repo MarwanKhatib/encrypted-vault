@@ -9,7 +9,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
-import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.example.encryptedvault.media.MediaTransfer
@@ -54,13 +53,14 @@ fun rememberImportLauncher(settings: AppSettings, snackbar: SnackbarHostState, o
             if (picked.isEmpty()) return@launch
             onBusy("Encrypting ${picked.size}…")
             val staged = withContext(Dispatchers.IO) { picked.mapNotNull { MediaTransfer.stage(context, it) } }
-            val request = OneTimeWorkRequestBuilder<ImportWorker>().setInputData(ImportWorker.inputFor(staged)).build()
             val workManager = WorkManager.getInstance(context)
-            workManager.enqueue(request)
-            val info = workManager.getWorkInfoByIdFlow(request.id).first { it != null && it.state.isFinished }
+            val batches = ImportWorker.enqueueBatches(context, staged)
+            val succeeded = batches.isNotEmpty() && batches.all { id ->
+                workManager.getWorkInfoByIdFlow(id).first { it != null && it.state.isFinished }?.state == WorkInfo.State.SUCCEEDED
+            }
             onBusy(null)
 
-            if (info?.state != WorkInfo.State.SUCCEEDED) { snackbar.showSnackbar("Encryption failed; originals untouched."); return@launch }
+            if (!succeeded) { snackbar.showSnackbar("Encryption failed; originals untouched."); return@launch }
             if (!settings.offerDeleteOriginals) { snackbar.showSnackbar("Added ${staged.size} to the vault."); return@launch }
 
             val deletable = withContext(Dispatchers.IO) { MediaTransfer.verifiedOriginalUris(context, picked) }
