@@ -53,6 +53,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import com.example.encryptedvault.data.VaultItem
 import com.example.encryptedvault.ui.library.Timeline
 import java.time.LocalDate
@@ -186,7 +189,11 @@ fun MediaTile(item: VaultItem, selected: Boolean, selectionMode: Boolean, onClic
     )
     Box(
         Modifier.aspectRatio(1f).graphicsLayer { scaleX = scale; scaleY = scale }.background(MaterialTheme.colorScheme.surfaceVariant)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .semantics(mergeDescendants = true) {
+                contentDescription = describe(item)
+                if (selectionMode) this.selected = selected
+            },
     ) {
         bitmap?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
         if (selected) Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = .25f)))
@@ -205,6 +212,14 @@ fun MediaTile(item: VaultItem, selected: Boolean, selectionMode: Boolean, onClic
         }
     }
 }
+
+/** Spoken label for a tile, since its icons and thumbnail have no text of their own. */
+private fun describe(item: VaultItem): String = listOfNotNull(
+    item.name,
+    if (item.isVideo) "Video" else "Photo",
+    if (item.isVideo && item.durationMs > 0) Formatters.duration(item.durationMs) else null,
+    if (item.isFavorite) "Favorite" else null,
+).joinToString(", ")
 
 /** iOS-style selection indicator: a hollow ring, or a filled check when [selected]. */
 @Composable

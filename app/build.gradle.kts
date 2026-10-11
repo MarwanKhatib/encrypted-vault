@@ -61,6 +61,7 @@ dependencies {
     // Video playback straight from an encrypted DataSource, so no plaintext copy of a video is ever written to disk.
     implementation("androidx.media3:media3-exoplayer:1.3.1")
     implementation("androidx.media3:media3-ui:1.3.1")
+    implementation("androidx.media3:media3-transformer:1.3.1")
 
     testImplementation("junit:junit:4.13.2")
 

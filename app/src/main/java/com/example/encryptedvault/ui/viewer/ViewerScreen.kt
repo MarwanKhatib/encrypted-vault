@@ -54,24 +54,22 @@ import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.outlined.ContentCut
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.animation.AnimatedContent
-import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.PlayerView
 import com.example.encryptedvault.crypto.VaultFiles
 import com.example.encryptedvault.VaultApp
 import com.example.encryptedvault.data.VaultStorage
-import com.example.encryptedvault.media.VaultDataSource
+import com.example.encryptedvault.media.TrimRange
+import com.example.encryptedvault.media.buildVaultPlayer
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -169,6 +167,7 @@ fun ViewerScreen(
     var showDetails by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
+    var trimming by remember { mutableStateOf(false) }
     val current = items[pager.currentPage.coerceIn(0, items.lastIndex)]
     val showChrome = chromeVisible && !slideshow
 
@@ -250,6 +249,7 @@ fun ViewerScreen(
                                 ) { fav -> Icon(if (fav) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder, "Favorite", tint = MaterialTheme.colorScheme.primary) }
                             }
                             if (!current.isVideo) IconButton(onClick = { editing = true }) { Icon(Icons.Outlined.Tune, "Edit", tint = MaterialTheme.colorScheme.primary) }
+        if (current.isVideo && TrimRange.trimmable(current.durationMs)) IconButton(onClick = { trimming = true }) { Icon(Icons.Outlined.ContentCut, "Trim", tint = MaterialTheme.colorScheme.primary) }
                             IconButton(onClick = { showDetails = true }) { Icon(Icons.Outlined.Info, "Info", tint = MaterialTheme.colorScheme.primary) }
                             IconButton(onClick = { actions.moveToTrash(listOf(current)) }) { Icon(Icons.Outlined.Delete, "Delete", tint = MaterialTheme.colorScheme.primary) }
                         }
@@ -264,6 +264,7 @@ fun ViewerScreen(
     }
 
     if (editing) EditScreen(current) { message -> editing = false; if (message != null) scope.launch { snackbar.showSnackbar(message) } }
+    if (trimming) TrimScreen(current) { message -> trimming = false; if (message != null) scope.launch { snackbar.showSnackbar(message) } }
     if (showDetails) ItemDetailsSheet(
         current, onSaveCaption = { text -> scope.launch { repository.setCaption(current.id, text) } },
         onDismiss = { showDetails = false },
@@ -358,7 +359,6 @@ private fun ImagePage(item: VaultItem, isCurrent: Boolean, onTap: () -> Unit, on
  * decrypted segment by segment in memory and no plaintext file is ever created. Videos stored in the legacy format are
  * upgraded in place first (a one-off cost per old video).
  */
-@OptIn(UnstableApi::class)
 @Composable
 private fun VideoPage(item: VaultItem, isCurrent: Boolean, onTap: () -> Unit) {
     val context = LocalContext.current
@@ -378,9 +378,7 @@ private fun VideoPage(item: VaultItem, isCurrent: Boolean, onTap: () -> Unit) {
                 runCatching { VaultFiles.upgradeToStreaming(checkNotNull(VaultApp.sessionKey), VaultStorage.content(context, item.hash)) }.isSuccess
             }
             if (!ready) { failed = true; loading = false; return@launch }
-            val source = DataSource.Factory { VaultDataSource({ VaultApp.sessionKey }, { hash -> VaultStorage.content(context, hash) }) }
-            player = ExoPlayer.Builder(context).build().apply {
-                setMediaSource(ProgressiveMediaSource.Factory(source).createMediaSource(MediaItem.Builder().setUri("vault://${item.hash}").setMimeType(item.mimeType).build()))
+            player = buildVaultPlayer(context, item).apply {
                 addListener(object : Player.Listener { override fun onPlayerError(error: PlaybackException) { failed = true } })
                 prepare()
                 playWhenReady = true

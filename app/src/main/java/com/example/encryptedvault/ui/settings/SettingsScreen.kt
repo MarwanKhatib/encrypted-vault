@@ -2,7 +2,7 @@ package com.example.encryptedvault.ui.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -50,6 +50,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -130,6 +131,15 @@ fun SettingsScreen(settings: AppSettings, keys: KeyHierarchy, onBack: () -> Unit
                 Text("Auto-lock", style = MaterialTheme.typography.titleSmall)
                 Text("When the app goes to the background", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Choices(listOf("Instantly" to 0, "30 s" to 30, "1 min" to 60, "5 min" to 300), settings.autoLockSec) { settings.putAutoLockSec(it) }
+            }
+
+            Section("Backup") {
+                Text(
+                    "Keep a copy of your vault off this phone. Backups are encrypted with a passphrase you choose; without it, the file cannot be opened.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                BackupRows { message -> scope.launch { snackbar.showSnackbar(message) } }
             }
 
             Section("App icon") {
@@ -217,7 +227,7 @@ private fun SwitchRow(title: String, subtitle: String, checked: Boolean, enabled
 
 /** A setting that opens a dialog or action through a text button. */
 @Composable
-private fun ActionRow(title: String, subtitle: String, buttonLabel: String, enabled: Boolean = true, onClick: () -> Unit) {
+internal fun ActionRow(title: String, subtitle: String, buttonLabel: String, enabled: Boolean = true, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleSmall)
@@ -238,7 +248,7 @@ private fun Choices(options: List<Pair<String, Int>>, selected: Int, onSelect: (
 /** One launcher-icon option: a rounded preview with its home-screen label underneath. */
 @Composable
 private fun IconChoice(icon: AppIcon, selected: Boolean, onClick: () -> Unit) {
-    Column(Modifier.clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(Modifier.selectable(selected = selected, onClick = onClick, role = Role.RadioButton), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier.size(60.dp).background(colorResource(icon.backgroundRes), RoundedCornerShape(18.dp))
                 .border(if (selected) 3.dp else 0.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(18.dp)),

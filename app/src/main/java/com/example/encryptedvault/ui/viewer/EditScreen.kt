@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -20,9 +21,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.RotateLeft
+import androidx.compose.material.icons.automirrored.rounded.RotateRight
 import androidx.compose.material.icons.rounded.Flip
-import androidx.compose.material.icons.rounded.RotateLeft
-import androidx.compose.material.icons.rounded.RotateRight
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -42,15 +43,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkInfo
-import androidx.work.WorkManager
 import com.example.encryptedvault.data.VaultItem
 import com.example.encryptedvault.media.CropAspect
+import com.example.encryptedvault.media.CropBox
 import com.example.encryptedvault.media.Edit
 import com.example.encryptedvault.media.ImageEdits
 import com.example.encryptedvault.media.MediaTransfer
@@ -58,7 +59,6 @@ import com.example.encryptedvault.media.PhotoFilter
 import com.example.encryptedvault.media.SourceInfo
 import com.example.encryptedvault.work.ImportWorker
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -77,7 +77,10 @@ fun EditScreen(item: VaultItem, onDone: (String?) -> Unit) {
     var edit by remember { mutableStateOf(Edit()) }
     var saving by remember { mutableStateOf(false) }
     val base by produceState<Bitmap?>(null, item.id) { value = withContext(Dispatchers.IO) { MediaTransfer.loadFullImage(context, item, PREVIEW_EDGE) } }
-    val preview by produceState<Bitmap?>(null, base, edit) { value = base?.let { b -> withContext(Dispatchers.Default) { ImageEdits.apply(b, edit) } } }
+    // The crop is drawn as an overlay on the whole picture, so the preview leaves it out and only recomputes for colour and rotation changes.
+    val look = edit.copy(crop = CropBox())
+    val preview by produceState<Bitmap?>(null, base, look) { value = base?.let { b -> withContext(Dispatchers.Default) { ImageEdits.apply(b, look) } } }
+    val imageAspect = base?.let { ImageEdits.orientedAspect(it.width, it.height, edit.rotation) } ?: 1f
 
     /** Renders the edit at full size, stages it as a JPEG and runs it through the normal import worker, then reports the outcome through [onDone]. */
     fun save() {
@@ -89,11 +92,8 @@ fun EditScreen(item: VaultItem, onDone: (String?) -> Unit) {
                 }
             }
             if (staged == null) { onDone("Couldn't edit this photo."); return@launch }
-            val request = OneTimeWorkRequestBuilder<ImportWorker>().setInputData(ImportWorker.inputFor(listOf(staged))).build()
-            val workManager = WorkManager.getInstance(context)
-            workManager.enqueue(request)
-            val info = workManager.getWorkInfoByIdFlow(request.id).first { it != null && it.state.isFinished }
-            onDone(if (info?.state == WorkInfo.State.SUCCEEDED) "Saved an edited copy." else "Saving failed; the original is untouched.")
+            val imported = ImportWorker.importAndWait(context, staged)
+            onDone(if (imported) "Saved an edited copy." else "Saving failed; the original is untouched.")
         }
     }
 
@@ -106,17 +106,31 @@ fun EditScreen(item: VaultItem, onDone: (String?) -> Unit) {
                     Button(onClick = ::save, enabled = !edit.isIdentity && !saving && preview != null) { Text(if (saving) "Saving…" else "Save") }
                 }
                 Box(Modifier.weight(1f).fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
-                    preview?.let { Image(it.asImageBitmap(), "Preview", Modifier.fillMaxSize(), contentScale = ContentScale.Fit) } ?: CircularProgressIndicator()
+                    val shown = preview
+                    if (shown == null) {
+                        CircularProgressIndicator()
+                    } else {
+                        Box(Modifier.aspectRatio(imageAspect)) {
+                            Image(shown.asImageBitmap(), "Preview", Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                            CropOverlay(
+                                crop = edit.crop,
+                                lockRatio = edit.aspect.ratio,
+                                imageAspect = imageAspect,
+                                onCropChange = { edit = edit.copy(crop = it) },
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                    }
                 }
                 Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()).padding(bottom = 8.dp)) {
                     Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { edit = edit.rotated(-90) }) { Icon(Icons.Rounded.RotateLeft, "Rotate left") }
-                        IconButton(onClick = { edit = edit.rotated(90) }) { Icon(Icons.Rounded.RotateRight, "Rotate right") }
-                        FilterChip(edit.flipHorizontal, { edit = edit.copy(flipHorizontal = !edit.flipHorizontal) }, { Text("Flip") }, leadingIcon = { Icon(Icons.Rounded.Flip, null, Modifier.size(18.dp)) })
+                        IconButton(onClick = { edit = edit.rotated(-90) }) { Icon(Icons.AutoMirrored.Rounded.RotateLeft, "Rotate left") }
+                        IconButton(onClick = { edit = edit.rotated(90) }) { Icon(Icons.AutoMirrored.Rounded.RotateRight, "Rotate right") }
+                        FilterChip(edit.flipHorizontal, { edit = edit.flipped() }, { Text("Flip") }, leadingIcon = { Icon(Icons.Rounded.Flip, null, Modifier.size(18.dp)) })
                         TextButton(onClick = { edit = Edit() }, enabled = !edit.isIdentity) { Text("Reset") }
                     }
                     LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(CropAspect.entries) { a -> FilterChip(edit.aspect == a, { edit = edit.copy(aspect = a) }, { Text(a.label) }) }
+                        items(CropAspect.entries) { a -> FilterChip(edit.aspect == a, { edit = edit.withAspect(a, imageAspect) }, { Text(a.label) }) }
                     }
                     LazyRow(Modifier.padding(top = 4.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(PhotoFilter.entries) { f -> FilterChip(edit.filter == f, { edit = edit.copy(filter = f) }, { Text(f.label) }) }
@@ -135,6 +149,6 @@ fun EditScreen(item: VaultItem, onDone: (String?) -> Unit) {
 private fun EditSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
     Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.padding(end = 12.dp).weight(0.35f), style = MaterialTheme.typography.bodyMedium)
-        Slider(value, onChange, Modifier.weight(0.65f), valueRange = range)
+        Slider(value, onChange, Modifier.weight(0.65f).semantics { contentDescription = label }, valueRange = range)
     }
 }

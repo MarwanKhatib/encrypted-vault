@@ -4,6 +4,9 @@ import android.content.Context
 import android.graphics.Bitmap
 import androidx.work.CoroutineWorker
 import androidx.work.Data
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.example.encryptedvault.VaultApp
 import com.example.encryptedvault.crypto.VaultFiles
@@ -12,6 +15,7 @@ import com.example.encryptedvault.data.PhotoMetadata
 import com.example.encryptedvault.data.VaultDatabase
 import com.example.encryptedvault.data.VaultRepository
 import com.example.encryptedvault.data.VaultStorage
+import kotlinx.coroutines.flow.first
 import com.example.encryptedvault.media.SourceInfo
 import com.example.encryptedvault.media.Thumbnails
 import com.example.encryptedvault.ui.settings.AppSettings
@@ -95,5 +99,14 @@ class ImportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             .putStringArray(KEY_FOLDERS, files.map { it.info.folder.orEmpty() }.toTypedArray())
             .putLongArray(KEY_TAKEN_AT, files.map { it.info.takenAt }.toLongArray())
             .build()
+
+        /** Imports [staged] through this worker and suspends until it finishes; true when it succeeded. */
+        suspend fun importAndWait(context: Context, staged: com.example.encryptedvault.media.MediaTransfer.StagedFile): Boolean {
+            val request = OneTimeWorkRequestBuilder<ImportWorker>().setInputData(inputFor(listOf(staged))).build()
+            val workManager = WorkManager.getInstance(context)
+            workManager.enqueue(request)
+            val info = workManager.getWorkInfoByIdFlow(request.id).first { it != null && it.state.isFinished }
+            return info?.state == WorkInfo.State.SUCCEEDED
+        }
     }
 }

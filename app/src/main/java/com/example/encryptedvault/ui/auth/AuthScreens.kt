@@ -19,6 +19,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -320,7 +322,7 @@ fun LockScreen(keys: KeyHierarchy, bip39: Bip39, onRecover: () -> Unit, onUnlock
         )
         PinPad(
             pin, enabled = !busy && remaining == 0L, onPin = { error = null; pin = it },
-            bottomLeft = if (bio) ({ IconButton(onClick = ::tryBiometric) { FingerprintGlyph(MaterialTheme.colorScheme.primary, 36.dp) } }) else null,
+            bottomLeft = if (bio) ({ IconButton(onClick = ::tryBiometric, modifier = Modifier.semantics { contentDescription = "Unlock with fingerprint" }) { FingerprintGlyph(MaterialTheme.colorScheme.primary, 36.dp) } }) else null,
             maxLength = if (pinLength > 0) pinLength else MAX_PIN,
         )
         // Legacy vaults without a stored length keep the explicit Unlock button.

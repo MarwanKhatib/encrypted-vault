@@ -27,7 +27,7 @@ import java.io.OutputStream
  * temporary files are kept in cache and wiped by [sweepTemporaryPlaintext].
  */
 object MediaTransfer {
-    private const val IMPORT_DIR = "import"
+    internal const val IMPORT_DIR = "import"
     private const val SHARE_DIR = "share"
     /** Folder an older version decrypted videos into; it is only swept now, never written. */
     private const val PLAYBACK_DIR = "play"
