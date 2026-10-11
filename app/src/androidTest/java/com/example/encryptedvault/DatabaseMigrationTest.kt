@@ -4,9 +4,18 @@ import androidx.room.testing.MigrationTestHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.example.encryptedvault.crypto.Bip39
+import com.example.encryptedvault.crypto.KeyHierarchy
+import com.example.encryptedvault.crypto.VaultFiles
+import com.example.encryptedvault.data.PhotoMetadata
+import com.example.encryptedvault.data.PhotoMetadataCodec
 import com.example.encryptedvault.data.VaultDatabase
+import com.example.encryptedvault.data.VaultRepository
+import com.example.encryptedvault.data.VaultStorage
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import java.io.ByteArrayInputStream
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -81,5 +90,40 @@ class DatabaseMigrationTest {
         db.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'people'").use { c -> assertEquals(0, c.count) }
     }
 
-    private companion object { const val DB = "migration-test" }
+    /** A photo encrypted and described under schema v4 must still decrypt, with its metadata, after the upgrade to v5 (Gap 11). */
+    @Test
+    fun photoWrittenBeforeTheMigrationStillDecryptsAfterIt() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val keys = KeyHierarchy(context).apply { destroyAllKeyMaterial() }
+        try {
+            val bip39 = Bip39(context.assets.open("bip39_english.txt").bufferedReader().readLines().map { it.trim() }.filter { it.isNotEmpty() })
+            keys.setUp(pin, bip39)
+            val key = checkNotNull(keys.unlockWithPin(pin))
+            val content = ByteArray(5000) { (it * 7).toByte() }
+            val file = VaultStorage.content(context, "h5").also { VaultFiles.encryptAtomic(key, ByteArrayInputStream(content), it) }
+            val metaEnc = VaultRepository.encryptMetadata(key, PhotoMetadata("beach.jpg", "DCIM/Camera", "Sunset"))
+
+            helper.createDatabase(DB, 4).apply {
+                execSQL("INSERT INTO photos (hash, mimeType, timestamp, status, metaEnc) VALUES ('h5', 'image/jpeg', 5000, 'complete', ?)", arrayOf(metaEnc))
+                close()
+            }
+            val db = helper.runMigrationsAndValidate(DB, 5, true, VaultDatabase.MIGRATION_4_5)
+
+            db.query("SELECT metaEnc FROM photos WHERE hash = 'h5'").use { c ->
+                assertTrue(c.moveToFirst())
+                val meta = PhotoMetadataCodec.decode(KeyHierarchy.gcmDecrypt(key, c.getBlob(0)))
+                assertEquals("beach.jpg", meta.name)
+                assertEquals("Sunset", meta.caption)
+            }
+            assertArrayEquals(content, VaultFiles.decryptStream(key, file).use { it.readBytes() })
+            file.delete()
+        } finally {
+            keys.destroyAllKeyMaterial()
+        }
+    }
+
+    private companion object {
+        const val DB = "migration-test"
+        val pin = "604817".toCharArray()
+    }
 }

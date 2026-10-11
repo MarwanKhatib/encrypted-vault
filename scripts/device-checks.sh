@@ -81,6 +81,13 @@ drill() {
   grep -E "OK \(|FAILURES|stack=" "$OUT/drill-phase2.txt" | head -5
 }
 
+flows() {
+  say "trim and backup flows (TrimAndBackupFlowTest)"
+  "$ADB" shell am instrument -w -r -e class "$PKG.TrimAndBackupFlowTest" "$RUNNER" > "$OUT/flows.txt" 2>&1
+  grep -E "OK \(|FAILURES|stack=|Tests run" "$OUT/flows.txt" | head -10
+  echo "  full log: $OUT/flows.txt"
+}
+
 recents() {
   say "release build: window must be FLAG_SECURE so recents shows no content"
   [ -f "$RELEASE_APK" ] || { echo "  build first: ./gradlew assembleRelease"; return 1; }
@@ -102,5 +109,6 @@ case "${1:-}" in
   drill-kill) wait_for_boot && install_debug && copy_samples && drill kill ;;
   drill-reboot) wait_for_boot && install_debug && copy_samples && drill reboot ;;
   recents) wait_for_boot && recents ;;
+  flows) wait_for_boot && install_debug && copy_samples && flows ;;
   *) sed -n '2,11p' "$0"; exit 2 ;;
 esac
