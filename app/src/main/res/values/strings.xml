@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Vault</string>
+    <!-- Home-screen labels of the disguise icons (see appicon/AppIcon.kt). -->
+    <string name="disguise_weather">Weather</string>
+    <string name="disguise_calculator">Calculator</string>
+    <string name="disguise_notes">Notes</string>
+    <string name="disguise_clock">Clock</string>
+</resources>
