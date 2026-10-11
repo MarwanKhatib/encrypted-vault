@@ -181,6 +181,8 @@ override fun onMultiWindowModeChanged(isInMultiWindowMode: Boolean) {
 
 **Practical recommendation:** Add an explicit **local export feature** — not cloud, not automatic, but a manual "Export encrypted vault to a folder" action that copies the `.enc` files + database to a user-chosen location (e.g., a USB-C drive, SD card if the Pixel model supports one, or a folder you then manually copy via USB cable to a computer). This is the FOSS/offline-compliant way to let you "back yourself up" without the app ever doing it automatically or via network.
 
+**Status (2026-10-11): implemented.** Settings → Backup writes every item, with albums and captions, to one passphrase-encrypted file, and restores it on any device. The file format and the reason for not copying raw `.enc` files are in `docs/decisions/adr-007-encrypted-export-and-restore.md`. Code: `backup/VaultBackup.kt`, `backup/BackupRecords.kt`, `crypto/BackupCrypto.kt`.
+
 ---
 
 ## GAP 9 — Video and HEIC/RAW format support was assumed-away, not designed
@@ -291,12 +293,32 @@ v1 listed "unit tests," "integration tests," "security tests" as headers with ex
 - [ ] Share a photo to a test app → verify re-encryption completes AND temp cache file is actually gone (`ls` the cache dir manually)
 - [ ] Share a photo → inspect the shared file's EXIF with a separate tool → verify GPS stripped if toggle was on (Gap 10)
 - [ ] Revoke photo permission mid-session via system Settings → verify app doesn't crash, re-prompts gracefully (v3 Gap 4)
-- [ ] `adb backup` the app → verify output is empty/rejected (Gap 1)
+- [x] `adb backup` the app → verify output is empty/rejected (Gap 1) — *2026-10-11, emulator `vault34`: output 0 bytes*
 - [ ] Simulate a schema migration (bump version, add a column) → verify existing vault photos still decrypt correctly after update (Gap 11)
 - [ ] Decrypt a HEIC photo and an MP4 video thumbnail → verify both render (Gap 9)
 - [ ] Trigger StrongBox unavailable path on an emulator (no secure hardware) → verify graceful TEE fallback, not a crash (v3 §1)
 
 This list is the actual acceptance bar — treat it as a checklist to run through before trusting the app with photos you can't afford to lose.
+
+**Status by item (2026-10-11, emulator `vault34`, release APK signed with the real release key, `scripts/device-checks.sh`):**
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Kill mid-batch | **Pass.** Force-stop at 145 complete / 2 half-written of 150. After relaunch: 150 entries, one each, no pending rows, no leftovers. This found a real bug (WorkManager's 10 KB input limit) and it is fixed. |
+| 2 | Reboot mid-encryption | **Pass.** Reboot at 145 / 2 of 150. After boot: 150 entries, one each, no pending rows. |
+| 3 | Same photo twice | **Pass.** `DeviceChecksTest.encryptingTheSamePhotoTwiceMakesOneEntry`. |
+| 4 | 10 wrong PINs | **Pass** at the state layer: `DeviceChecksTest.tenWrongPinsLockTheVault`. The UI countdown is not checked. |
+| 5 | Split-screen auto-lock | **Not verified.** Code path: `MainActivity.onMultiWindowModeChanged` calls `lockNow()`. Could not enter split-screen with `am start`. Manual check needed. |
+| 6 | Recents thumbnail blank | **Partly.** The release window carries `SECURE` (`dumpsys window`). The recents screenshot came back empty, so the blank thumbnail itself is not captured. |
+| 7 | Shared copy removed from cache | **Partly.** `DeviceChecksTest.sharedPlaintextCopyIsSweptAway` checks the sweep. The share sheet flow is not driven. |
+| 8 | GPS stripped from shared copy | **Partly.** `DeviceChecksTest.gpsIsStrippedFromTheSharedCopy` checks the strip function on a real JPEG with GPS. The share flow and an external EXIF tool are not used. |
+| 9 | Revoke photo permission | **Not applicable.** The app holds no storage permission (photos come through the system picker). |
+| 10 | `adb backup` gives nothing | **Pass.** Output 0 bytes. |
+| 11 | Schema migration keeps photos decryptable | **Partly.** `DatabaseMigrationTest` (v1→v5) passes. Decryption after migration is not tested. |
+| 12 | HEIC and MP4 thumbnails render | **Partly.** MP4 passes (`mp4VideoGetsADurationAndAFrame`, sample recorded with `screenrecord`). HEIC is **not run**: no HEIC sample exists on this emulator, and the SDK has no HEIF encoder. Put a real HEIC at `cacheDir/sample.heic` to run it. |
+| 13 | No StrongBox → TEE fallback | **Pass by evidence.** This emulator has no StrongBox; the key setup and unlock tests pass through the fallback path. |
+
+Re-run with `scripts/device-checks.sh unit | drill-kill | drill-reboot | recents`.
 
 ---
 

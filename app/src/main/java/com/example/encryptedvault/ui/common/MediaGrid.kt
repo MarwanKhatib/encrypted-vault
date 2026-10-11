@@ -213,10 +213,12 @@ fun MediaTile(item: VaultItem, selected: Boolean, selectionMode: Boolean, onClic
     }
 }
 
-/** Spoken label for a tile, since its icons and thumbnail have no text of their own. */
+/**
+ * Spoken label for a tile: type, date, length and favourite. Never the file name or folder, which would leak through TalkBack (Gap 14).
+ */
 private fun describe(item: VaultItem): String = listOfNotNull(
-    item.name,
     if (item.isVideo) "Video" else "Photo",
+    Formatters.dayHeader(Timeline.dayOf(item)),
     if (item.isVideo && item.durationMs > 0) Formatters.duration(item.durationMs) else null,
     if (item.isFavorite) "Favorite" else null,
 ).joinToString(", ")
