@@ -22,12 +22,15 @@ object SearchMatcher {
             query
                 .trim()
                 .lowercase()
-                .split(Regex("\\s+"))
+                .split(WHITESPACE)
                 .filter { it.isNotEmpty() }
         if (words.isEmpty()) return true
         val haystack = searchableText(item, zone)
         return words.all { it in haystack }
     }
+
+    /** Splits a query on runs of whitespace; compiled once instead of once per item. */
+    private val WHITESPACE = Regex("\\s+")
 
     /** The lower-cased text a query is matched against. Exposed (internal) so tests can assert what is searchable. */
     internal fun searchableText(

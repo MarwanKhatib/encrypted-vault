@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.crypto.SecretKey
 
@@ -24,12 +25,25 @@ class VaultRepository private constructor(
     private val context: Context,
     private val db: VaultDatabase,
 ) {
+    /** Decrypted metadata per item id, reused while its encrypted blob is unchanged. Cleared on lock so plaintext does not outlive the session. */
+    private val metaCache = ConcurrentHashMap<Long, CachedMeta>()
+
+    /** One cached decryption: the blob it came from, so a changed blob is decrypted again. */
+    private class CachedMeta(
+        val blob: ByteArray?,
+        val meta: PhotoMetadata,
+    )
+
     // ---- Observation ------------------------------------------------------------------------
 
     /** Every completed item, including those in Recently Deleted. Empty while the vault is locked. */
     val items: Flow<List<VaultItem>> =
         whenUnlocked { key ->
-            db.photoDao().observeCompleted().map { rows -> rows.map { it.toItem(key) } }
+            db.photoDao().observeCompleted().map { rows ->
+                // Forget cached metadata for rows that no longer exist (deleted or purged).
+                metaCache.keys.retainAll(rows.mapTo(HashSet(rows.size)) { it.id })
+                rows.map { it.toItem(key) }
+            }
         }
 
     /** All albums with their member ids, joined from the albums and album_items tables. */
@@ -135,9 +149,19 @@ class VaultRepository private constructor(
     // ---- Mapping helpers --------------------------------------------------------------------
 
     /** Decrypts the metadata blob; a missing or undecodable blob yields empty metadata instead of failing the whole list. */
-    private fun PhotoEntity.decryptMetadata(key: SecretKey): PhotoMetadata =
-        metaEnc?.let { runCatching { PhotoMetadataCodec.decode(KeyHierarchy.gcmDecrypt(key, it)) }.getOrNull() }
-            ?: PhotoMetadata()
+    private fun PhotoEntity.decryptMetadata(key: SecretKey): PhotoMetadata {
+        val cached = metaCache[id]
+        if (cached != null && sameBlob(cached.blob, metaEnc)) return cached.meta
+        val meta = metaEnc?.let { runCatching { PhotoMetadataCodec.decode(KeyHierarchy.gcmDecrypt(key, it)) }.getOrNull() } ?: PhotoMetadata()
+        metaCache[id] = CachedMeta(metaEnc, meta)
+        return meta
+    }
+
+    /** Null-safe byte comparison: two nulls match, a null never matches bytes. */
+    private fun sameBlob(
+        a: ByteArray?,
+        b: ByteArray?,
+    ): Boolean = if (a == null || b == null) a === b else a.contentEquals(b)
 
     /** Combines the clear columns with the decrypted metadata into the UI model. */
     private fun PhotoEntity.toItem(key: SecretKey): VaultItem {
@@ -163,7 +187,14 @@ class VaultRepository private constructor(
     /** Re-subscribes to [source] every time the session key appears, changes or disappears (lock/unlock). */
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun <T> whenUnlocked(source: (SecretKey) -> Flow<List<T>>): Flow<List<T>> =
-        snapshotFlow { VaultApp.sessionKey }.flatMapLatest { key -> if (key == null) flowOf(emptyList()) else source(key) }
+        snapshotFlow { VaultApp.sessionKey }.flatMapLatest { key ->
+            if (key == null) {
+                metaCache.clear()
+                flowOf(emptyList())
+            } else {
+                source(key)
+            }
+        }
 
     companion object {
         /** How long an item stays recoverable in Recently Deleted. */

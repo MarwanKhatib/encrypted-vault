@@ -17,7 +17,7 @@ Package root: `com.example.encryptedvault`. Dependencies point downwards: `ui` �
 
 `VaultRoot` (setup → lock → app) → `MainScaffold` (tabs and back stack) → `LibraryScreen` / `ForYouScreen` / `AlbumsScreen` / `SearchScreen`. Pushed screens: `CollectionScreen`, `ViewerScreen` (with `EditScreen`, `TrimScreen`, `ItemDetailsSheet`), `SettingsScreen` (with `BackupControls`).
 
-Pure logic used by the screens (and covered by unit tests): `Timeline` (grouping, ranges), `ForYou`, `CollectionSource` (`Collections.items` / `title`), `SearchMatcher`, `RestoreTarget`, `Formatters`, `CalculatorEngine` (decoy), `ImageEdits` (crop math and colour matrix).
+Pure logic used by the screens (and covered by unit tests): `Timeline` (grouping, ranges), `LibraryFeed` (Library visibility and event membership), `ForYou`, `CollectionSource` (`Collections.items` / `title`), `SearchMatcher`, `RestoreTarget`, `Formatters`, `CalculatorEngine` (decoy), `ImageEdits` (crop math and colour matrix).
 
 ## Data flow
 
@@ -30,6 +30,14 @@ Pure logic used by the screens (and covered by unit tests): `Timeline` (grouping
 - **Backup:** `VaultBackup.export` writes header and records through `BackupCrypto.encrypting` (PBKDF2 key, 1 MiB AES-GCM chunks). Each record is `BackupRecords.write` followed by the item bytes. `VaultBackup.restore` reads through `BackupCrypto.decrypting`, skips items whose hash is already in the vault, and reports a `RestoreReport`.
 - **Plain export (ADR-008):** `BackupControls` → `PlainExport.export`, which writes each non-trashed item through `DocumentsContract` into the picked folder. JPEG copies with location removal go through a temporary file in `cache/share`, swept on lock. `manifest.csv` is built by `PlainExport.manifest`.
 - **Lock:** `MainActivity.onStop` calls `SessionManager.consumeStopLock`, then `lockNow`, which locks the session and runs `MediaTransfer.sweepTemporaryPlaintext` with `olderThanMs = 0`. The multi-window and configuration-change callbacks also lock. The optional idle lock (ADR-010) is a once-a-minute check while the activity is resumed; touch and key input reset it through `IdleLock`, and it locks only when `Settings → Privacy → Lock after idle` is set and the session is unlocked.
+
+## Performance notes
+
+- **Metadata decrypt cache:** `VaultRepository` keeps decrypted metadata per item id and reuses it while the encrypted blob is unchanged. Every database emission used to decrypt every item; now only changed items are decrypted. The cache is dropped when the vault locks (plaintext must not outlive the session) and pruned to the rows that still exist.
+- **Library selection:** `LibraryFeed.visible` (filter, time range, order) and `LibraryFeed.inEvent` (id-set lookup, not `List.contains` on whole items) are computed once per input change through `remember`, not on every recomposition. Year and event groups are remembered too.
+- **Search:** the whitespace regex is compiled once (`SearchMatcher.WHITESPACE`), not per item per keystroke.
+- **Thumbnails:** at most three decrypts at once (`ThumbnailLoader`).
+- Not measured on a device yet; these are algorithmic fixes, checked by unit tests for behaviour (not for speed).
 
 ## Files on disk (`files/vault/`, names are the plaintext SHA-256)
 
@@ -55,7 +63,7 @@ Pure logic used by the screens (and covered by unit tests): `Timeline` (grouping
 
 ## Test map
 
-- Unit (`app/src/test`): `BackupCryptoTest`, `BackupRecordsTest`, `PlainExportTest`, `Bip39Test`, `LockoutTimingTest`, `PinPolicyTest`, `PinVerifierTest`, `VaultFilesTest`, `PhotoMetadataCodecTest`, `ImageEditsTest`, `MediaTransferMimeTest`, `RestoreTargetsTest`, `VideoTrimTest`, `IdleLockTest`, `IntegrityTest`, `PanicWipeFilesTest`, `CollectionsTest`, `FormattersTest`, `CalculatorEngineTest`, `ForYouTest`, `TimelineTest`, `SearchMatcherTest`, `ImportBatchesTest`.
+- Unit (`app/src/test`): `BackupCryptoTest`, `BackupRecordsTest`, `PlainExportTest`, `Bip39Test`, `LockoutTimingTest`, `PinPolicyTest`, `PinVerifierTest`, `VaultFilesTest`, `PhotoMetadataCodecTest`, `ImageEditsTest`, `MediaTransferMimeTest`, `RestoreTargetsTest`, `VideoTrimTest`, `IdleLockTest`, `IntegrityTest`, `PanicWipeFilesTest`, `CollectionsTest`, `FormattersTest`, `CalculatorEngineTest`, `ForYouTest`, `LibraryFeedTest`, `TimelineTest`, `SearchMatcherTest`, `ImportBatchesTest`.
 - Instrumented (`app/src/androidTest`, 48 tests on the emulator): `DatabaseMigrationTest`, `DeviceChecksTest`, `ImportFormatsTest`, `KeyHierarchyTest`, `KillMidBatchTest` (two kill-drill phases skip unless `killDrill=true`), `PanicWipeTest`, `TrimAndBackupFlowTest`, `VaultDataSourceTest`.
 
 ## Rules that keep it safe

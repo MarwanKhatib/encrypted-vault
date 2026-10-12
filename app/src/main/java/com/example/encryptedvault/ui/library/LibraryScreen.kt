@@ -77,16 +77,14 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 
-/** Which media types the Library shows (the "Filter" section of the ⋯ menu). */
-private enum class LibraryFilter(
-    val label: String,
-    val icon: ImageVector,
-) {
-    ALL("All items", Icons.Filled.PhotoLibrary),
-    FAVORITES("Favorites", Icons.Filled.Favorite),
-    PHOTOS("Photos", Icons.Filled.Image),
-    VIDEOS("Videos", Icons.Filled.Videocam),
-}
+/** Icon for each Library filter in the ⋯ menu. */
+private fun LibraryFilter.icon(): ImageVector =
+    when (this) {
+        LibraryFilter.ALL -> Icons.Filled.PhotoLibrary
+        LibraryFilter.FAVORITES -> Icons.Filled.Favorite
+        LibraryFilter.PHOTOS -> Icons.Filled.Image
+        LibraryFilter.VIDEOS -> Icons.Filled.Videocam
+    }
 
 /**
  * The Library tab, modelled on iOS Photos: Years / Months / Days / All, newest at the bottom,
@@ -124,19 +122,13 @@ fun LibraryScreen(
 
     val activeRange = if (rangePreset == RangePreset.CUSTOM) customRange else Timeline.rangeFor(rangePreset)
     val newestAtBottom = settings.newestAtBottom
-    val visible =
-        remember(allItems, filter, activeRange, newestAtBottom) {
-            val library = allItems.filter { it.isInLibrary }
-            val byType =
-                when (filter) {
-                    LibraryFilter.ALL -> library
-                    LibraryFilter.FAVORITES -> library.filter { it.isFavorite }
-                    LibraryFilter.PHOTOS -> library.filter { !it.isVideo }
-                    LibraryFilter.VIDEOS -> library.filter { it.isVideo }
-                }
-            Timeline.filter(byType, activeRange).let { if (newestAtBottom) it.reversed() else it }
+    val visible = remember(allItems, filter, activeRange, newestAtBottom) { LibraryFeed.visible(allItems, filter, activeRange, newestAtBottom) }
+    val yearGroups = remember(visible) { Timeline.byYear(visible) }
+    val monthEvents =
+        remember(visible, focusYear) {
+            Timeline.byEvent(visible.filter { focusYear == null || Timeline.monthOf(it).year == focusYear })
         }
-    val selectedItems = visible.filter { it.id in selectedIds }
+    val selectedItems = remember(visible, selectedIds) { visible.filter { it.id in selectedIds } }
 
     /** Leaves multi-select mode and clears the selection. */
     fun endSelection() {
@@ -165,7 +157,7 @@ fun LibraryScreen(
         onOpenViewer(ids, ids.indexOf(item.id))
     }
 
-    val gridItems = focusEvent?.let { event -> visible.filter { it in event.items } } ?: visible
+    val gridItems = remember(visible, focusEvent) { focusEvent?.let { LibraryFeed.inEvent(visible, it) } ?: visible }
     val scrollKey = listOf(scope, focusYear, focusEvent, filter, rangePreset, newestAtBottom)
     val title =
         when {
@@ -196,7 +188,7 @@ fun LibraryScreen(
                         ) {
                             OverflowMenuHeading("Show")
                             LibraryFilter.entries.forEach { option ->
-                                OverflowMenuItem(option.label, option.icon, selected = filter == option) {
+                                OverflowMenuItem(option.label, option.icon(), selected = filter == option) {
                                     menuOpen = false
                                     filter = option
                                 }
@@ -266,7 +258,7 @@ fun LibraryScreen(
                     )
                 scope == TimelineScope.YEARS && focusYear == null ->
                     PeriodCards(
-                        Timeline.byYear(visible).map { group ->
+                        yearGroups.map { group ->
                             PeriodCard(group.key.toString(), Formatters.itemCount(group.items.size), group.cover) {
                                 focusYear =
                                     group.key
@@ -278,7 +270,7 @@ fun LibraryScreen(
                     )
                 scope == TimelineScope.MONTHS && focusEvent == null ->
                     PeriodCards(
-                        Timeline.byEvent(visible.filter { focusYear == null || Timeline.monthOf(it).year == focusYear }).map { event ->
+                        monthEvents.map { event ->
                             PeriodCard(Formatters.dateRange(event.firstDay, event.lastDay), Formatters.itemCount(event.items.size), event.cover) {
                                 focusEvent =
                                     event
