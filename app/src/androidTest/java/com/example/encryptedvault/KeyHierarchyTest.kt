@@ -34,7 +34,15 @@ class KeyHierarchyTest {
     @Before fun freshState() {
         keys = KeyHierarchy(context)
         keys.destroyAllKeyMaterial()
-        bip39 = Bip39(context.assets.open("bip39_english.txt").bufferedReader().readLines().map { it.trim() }.filter { it.isNotEmpty() })
+        bip39 =
+            Bip39(
+                context.assets
+                    .open("bip39_english.txt")
+                    .bufferedReader()
+                    .readLines()
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() },
+            )
     }
 
     @After fun cleanUp() = keys.destroyAllKeyMaterial()
@@ -176,7 +184,8 @@ class KeyHierarchyTest {
         val salt = PinVerifier.newSalt()
         val legacyPinKey = SecretKeySpec(PinVerifier.derive(pin, salt, PinVerifier.LEGACY_ITERATIONS), "AES")
         val prefs = context.getSharedPreferences("vault_keys", Context.MODE_PRIVATE)
-        prefs.edit()
+        prefs
+            .edit()
             .putString("salt", Base64.encodeToString(salt, Base64.NO_WRAP))
             .putString("wrapped_pin", Base64.encodeToString(KeyHierarchy.gcmEncrypt(legacyPinKey, master.encoded), Base64.NO_WRAP))
             .putString("wrapped_ks", "obsolete-unauthenticated-wrapper")

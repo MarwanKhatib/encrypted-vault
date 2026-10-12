@@ -27,9 +27,12 @@ import javax.crypto.SecretKey
 class VaultDataSource(
     private val key: () -> SecretKey?,
     private val fileFor: (String) -> File,
-    private val openChannel: (SecretKey, File) -> SeekableByteChannel = { k, f -> com.example.encryptedvault.crypto.VaultFiles.openSeekable(k, f) },
-) : BaseDataSource(/* isNetwork = */ false) {
-
+    private val openChannel: (SecretKey, File) -> SeekableByteChannel = { k, f ->
+        com.example.encryptedvault.crypto.VaultFiles
+            .openSeekable(k, f)
+    },
+// Not a network source (BaseDataSource's isNetwork flag is false).
+) : BaseDataSource(false) {
     private var channel: SeekableByteChannel? = null
     private var openedUri: Uri? = null
     private var bytesRemaining = 0L
@@ -40,7 +43,12 @@ class VaultDataSource(
         transferInitializing(dataSpec)
         val hash = dataSpec.uri.host ?: throw IOException("missing item id in ${dataSpec.uri}")
         val masterKey = key() ?: throw IOException("vault is locked")
-        val ch = try { openChannel(masterKey, fileFor(hash)) } catch (e: Exception) { throw IOException("cannot open encrypted video", e) }
+        val ch =
+            try {
+                openChannel(masterKey, fileFor(hash))
+            } catch (e: Exception) {
+                throw IOException("cannot open encrypted video", e)
+            }
         channel = ch
         try {
             ch.position(dataSpec.position)
@@ -55,12 +63,21 @@ class VaultDataSource(
     }
 
     /** Decrypts up to [length] bytes into [buffer]; returns [C.RESULT_END_OF_INPUT] at the end. Authentication failures become IOExceptions. */
-    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+    override fun read(
+        buffer: ByteArray,
+        offset: Int,
+        length: Int,
+    ): Int {
         if (length == 0) return 0
         if (bytesRemaining == 0L) return C.RESULT_END_OF_INPUT
         val ch = channel ?: throw IOException("data source is not open")
         val wanted = minOf(length.toLong(), bytesRemaining).toInt()
-        val read = try { ch.read(ByteBuffer.wrap(buffer, offset, wanted)) } catch (e: Exception) { throw IOException("decryption failed", e) }
+        val read =
+            try {
+                ch.read(ByteBuffer.wrap(buffer, offset, wanted))
+            } catch (e: Exception) {
+                throw IOException("decryption failed", e)
+            }
         if (read < 0) return C.RESULT_END_OF_INPUT
         bytesRemaining -= read
         bytesTransferred(read)
@@ -73,7 +90,9 @@ class VaultDataSource(
     /** Closes the channel (and with it the file). Safe to call repeatedly. */
     override fun close() {
         val wasOpen = channel != null
-        try { channel?.close() } finally {
+        try {
+            channel?.close()
+        } finally {
             channel = null
             openedUri = null
             bytesRemaining = 0

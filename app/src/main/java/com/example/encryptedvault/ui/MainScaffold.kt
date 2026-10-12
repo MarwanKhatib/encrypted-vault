@@ -1,7 +1,13 @@
 package com.example.encryptedvault.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Box
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -12,13 +18,6 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.PhotoAlbum
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -52,7 +51,11 @@ import com.example.encryptedvault.ui.settings.SettingsScreen
 import com.example.encryptedvault.ui.viewer.ViewerScreen
 
 /** Bottom-navigation tabs of the unlocked app (the same four as iOS Photos); the filled icon marks the selected tab. */
-private enum class MainTab(val label: String, val icon: ImageVector, val selectedIcon: ImageVector) {
+private enum class MainTab(
+    val label: String,
+    val icon: ImageVector,
+    val selectedIcon: ImageVector,
+) {
     LIBRARY("Library", Icons.Outlined.PhotoLibrary, Icons.Filled.PhotoLibrary),
     FOR_YOU("For You", Icons.Outlined.AutoAwesome, Icons.Filled.AutoAwesome),
     ALBUMS("Albums", Icons.Outlined.PhotoAlbum, Icons.Filled.PhotoAlbum),
@@ -62,16 +65,27 @@ private enum class MainTab(val label: String, val icon: ImageVector, val selecte
 /** Screens pushed on top of the tabs. The last entry of the back stack is the one shown. */
 private sealed interface Destination {
     /** One collection opened as a grid. */
-    data class Collection(val source: CollectionSource) : Destination
+    data class Collection(
+        val source: CollectionSource,
+    ) : Destination
+
     /** The full-screen viewer over [itemIds], starting at [index]. */
-    data class Viewer(val itemIds: List<Long>, val index: Int, val includeTrashed: Boolean) : Destination
+    data class Viewer(
+        val itemIds: List<Long>,
+        val index: Int,
+        val includeTrashed: Boolean,
+    ) : Destination
+
     /** The settings screen. */
     data object Settings : Destination
 }
 
 /** The unlocked app: four tabs plus a small back stack for collections, the viewer and settings. */
 @Composable
-fun MainScaffold(keys: KeyHierarchy, settings: AppSettings) {
+fun MainScaffold(
+    keys: KeyHierarchy,
+    settings: AppSettings,
+) {
     val context = LocalContext.current
     val repository = remember { VaultRepository.get(context) }
     val items by repository.items.collectAsState(emptyList())
@@ -86,11 +100,23 @@ fun MainScaffold(keys: KeyHierarchy, settings: AppSettings) {
     BackHandler(stack.isNotEmpty()) { stack.removeAt(stack.lastIndex) }
 
     /** Closes the top pushed screen. */
-    fun pop() { stack.removeAt(stack.lastIndex) }
+    fun pop() {
+        stack.removeAt(stack.lastIndex)
+    }
+
     /** Pushes the viewer over [ids] at [index]. */
-    fun openViewer(ids: List<Long>, index: Int, includeTrashed: Boolean = false) { stack += Destination.Viewer(ids, index, includeTrashed) }
+    fun openViewer(
+        ids: List<Long>,
+        index: Int,
+        includeTrashed: Boolean = false,
+    ) {
+        stack += Destination.Viewer(ids, index, includeTrashed)
+    }
+
     /** Pushes a collection grid. */
-    fun openCollection(source: CollectionSource) { stack += Destination.Collection(source) }
+    fun openCollection(source: CollectionSource) {
+        stack += Destination.Collection(source)
+    }
 
     // Material motion: pushed screens use a shared-axis slide + fade, tabs use fade-through.
     AnimatedContent(
@@ -101,40 +127,69 @@ fun MainScaffold(keys: KeyHierarchy, settings: AppSettings) {
         },
         label = "destination",
     ) { top ->
-    when (top) {
-        is Destination.Collection -> CollectionScreen(top.source, items, albums, settings, onBack = ::pop, onOpenViewer = { ids, index, trashed -> openViewer(ids, index, trashed) })
-        is Destination.Viewer -> ViewerScreen(items, top.itemIds, top.index, top.includeTrashed, albums, settings, onClose = ::pop)
-        Destination.Settings -> SettingsScreen(settings, keys, onBack = ::pop, onLockNow = { SessionManager.forceLock() })
-        null -> Scaffold(
-            containerColor = MaterialTheme.colorScheme.background,
-            snackbarHost = { SnackbarHost(snackbar) },
-            bottomBar = {
-                if (!(tab == MainTab.LIBRARY && selecting)) NavigationBar {
-                    MainTab.entries.forEach { entry ->
-                        NavigationBarItem(tab == entry, { tab = entry }, icon = { Icon(if (tab == entry) entry.selectedIcon else entry.icon, entry.label) }, label = { Text(entry.label) })
+        when (top) {
+            is Destination.Collection ->
+                CollectionScreen(top.source, items, albums, settings, onBack = ::pop, onOpenViewer = {
+                        ids,
+                        index,
+                        trashed,
+                    ->
+                    openViewer(ids, index, trashed)
+                })
+            is Destination.Viewer -> ViewerScreen(items, top.itemIds, top.index, top.includeTrashed, albums, settings, onClose = ::pop)
+            Destination.Settings -> SettingsScreen(settings, keys, onBack = ::pop, onLockNow = { SessionManager.forceLock() })
+            null ->
+                Scaffold(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    snackbarHost = { SnackbarHost(snackbar) },
+                    bottomBar = {
+                        if (!(tab == MainTab.LIBRARY && selecting)) {
+                            NavigationBar {
+                                MainTab.entries.forEach { entry ->
+                                    NavigationBarItem(tab == entry, { tab = entry }, icon = {
+                                        Icon(
+                                            if (tab ==
+                                                entry
+                                            ) {
+                                                entry.selectedIcon
+                                            } else {
+                                                entry.icon
+                                            },
+                                            entry.label,
+                                        )
+                                    }, label = { Text(entry.label) })
+                                }
+                            }
+                        }
+                    },
+                ) { padding ->
+                    AnimatedContent(
+                        tab,
+                        Modifier.padding(padding),
+                        transitionSpec = {
+                            (fadeIn(tween(210, delayMillis = 90)) + scaleIn(tween(210, delayMillis = 90), initialScale = 0.92f)) togetherWith
+                                fadeOut(tween(90))
+                        },
+                        label = "tab",
+                    ) { current ->
+                        when (current) {
+                            MainTab.LIBRARY ->
+                                LibraryScreen(
+                                    items,
+                                    albums,
+                                    settings,
+                                    snackbar,
+                                    onOpenViewer = { ids, index -> openViewer(ids, index) },
+                                    onOpenSettings = { stack += Destination.Settings },
+                                    onLock = { SessionManager.forceLock() },
+                                    onSelectionModeChanged = { selecting = it },
+                                )
+                            MainTab.FOR_YOU -> ForYouScreen(items, onOpenViewer = { ids, index -> openViewer(ids, index) }, onOpenCollection = ::openCollection)
+                            MainTab.ALBUMS -> AlbumsScreen(items, albums, onOpen = ::openCollection)
+                            MainTab.SEARCH -> SearchScreen(items, settings, onOpenViewer = { ids, index -> openViewer(ids, index) })
+                        }
                     }
                 }
-            },
-        ) { padding ->
-            AnimatedContent(
-                tab, Modifier.padding(padding),
-                transitionSpec = { (fadeIn(tween(210, delayMillis = 90)) + scaleIn(tween(210, delayMillis = 90), initialScale = 0.92f)) togetherWith fadeOut(tween(90)) },
-                label = "tab",
-            ) { current ->
-                when (current) {
-                    MainTab.LIBRARY -> LibraryScreen(
-                        items, albums, settings, snackbar,
-                        onOpenViewer = { ids, index -> openViewer(ids, index) },
-                        onOpenSettings = { stack += Destination.Settings },
-                        onLock = { SessionManager.forceLock() },
-                        onSelectionModeChanged = { selecting = it },
-                    )
-                    MainTab.FOR_YOU -> ForYouScreen(items, onOpenViewer = { ids, index -> openViewer(ids, index) }, onOpenCollection = ::openCollection)
-                    MainTab.ALBUMS -> AlbumsScreen(items, albums, onOpen = ::openCollection)
-                    MainTab.SEARCH -> SearchScreen(items, settings, onOpenViewer = { ids, index -> openViewer(ids, index) })
-                }
-            }
         }
-    }
     }
 }

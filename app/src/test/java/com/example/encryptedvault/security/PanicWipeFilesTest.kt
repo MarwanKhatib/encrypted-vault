@@ -11,11 +11,15 @@ import java.io.File
 class PanicWipeFilesTest {
     @get:Rule val tmp = TemporaryFolder()
 
-    private fun File.write(name: String, bytes: Int = 16) = File(this, name).also { it.writeBytes(ByteArray(bytes)) }
+    private fun File.write(
+        name: String,
+        bytes: Int = 16,
+    ) = File(this, name).also { it.writeBytes(ByteArray(bytes)) }
 
     @Test fun removesFilesAndNestedDirectoriesButKeepsTheRoot() {
         val root = tmp.newFolder("vault")
-        root.write("a.enc"); root.write("a.thumb.enc")
+        root.write("a.enc")
+        root.write("a.thumb.enc")
         File(root, "nested/deeper").also { it.mkdirs() }.write("b.enc")
 
         assertEquals(0, PanicWipe.deleteContents(root))

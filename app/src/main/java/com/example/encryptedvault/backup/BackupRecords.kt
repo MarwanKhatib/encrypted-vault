@@ -36,15 +36,24 @@ object BackupRecords {
     const val MAX_ALBUMS_PER_ITEM = 4096
     private const val COPY_BUFFER_BYTES = 64 * 1024
 
-    fun writeCount(out: DataOutputStream, count: Int) = out.writeInt(count)
+    fun writeCount(
+        out: DataOutputStream,
+        count: Int,
+    ) = out.writeInt(count)
 
-    fun readCount(input: DataInputStream, max: Int = Int.MAX_VALUE): Int {
+    fun readCount(
+        input: DataInputStream,
+        max: Int = Int.MAX_VALUE,
+    ): Int {
         val count = input.readInt()
         if (count !in 0..max) throw IOException("Corrupt backup record")
         return count
     }
 
-    fun write(out: DataOutputStream, record: BackupRecord) {
+    fun write(
+        out: DataOutputStream,
+        record: BackupRecord,
+    ) {
         out.writeText(record.hash)
         out.writeText(record.mimeType)
         out.writeLong(record.takenAt)
@@ -62,25 +71,30 @@ object BackupRecords {
         record.albums.forEach { out.writeText(it) }
     }
 
-    fun read(input: DataInputStream): BackupRecord = BackupRecord(
-        hash = input.readText(),
-        mimeType = input.readText(),
-        takenAt = input.readLong(),
-        sizeBytes = input.readLong(),
-        durationMs = input.readLong(),
-        width = input.readInt(),
-        height = input.readInt(),
-        favorite = input.readBoolean(),
-        hidden = input.readBoolean(),
-        trashed = input.readBoolean(),
-        name = input.readText(),
-        folder = input.readText().ifEmpty { null },
-        caption = input.readText(),
-        albums = List(readCount(input, MAX_ALBUMS_PER_ITEM)) { input.readText() },
-    )
+    fun read(input: DataInputStream): BackupRecord =
+        BackupRecord(
+            hash = input.readText(),
+            mimeType = input.readText(),
+            takenAt = input.readLong(),
+            sizeBytes = input.readLong(),
+            durationMs = input.readLong(),
+            width = input.readInt(),
+            height = input.readInt(),
+            favorite = input.readBoolean(),
+            hidden = input.readBoolean(),
+            trashed = input.readBoolean(),
+            name = input.readText(),
+            folder = input.readText().ifEmpty { null },
+            caption = input.readText(),
+            albums = List(readCount(input, MAX_ALBUMS_PER_ITEM)) { input.readText() },
+        )
 
     /** Copies exactly [count] bytes from [input] to [out], or discards them when [out] is null. A short stream means the backup was truncated. */
-    fun copyExactly(input: InputStream, out: OutputStream?, count: Long) {
+    fun copyExactly(
+        input: InputStream,
+        out: OutputStream?,
+        count: Long,
+    ) {
         val buffer = ByteArray(COPY_BUFFER_BYTES)
         var remaining = count
         while (remaining > 0) {

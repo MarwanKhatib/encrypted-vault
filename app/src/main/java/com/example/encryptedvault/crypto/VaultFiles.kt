@@ -6,9 +6,7 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.FilterOutputStream
 import java.io.InputStream
-import java.io.OutputStream
 import java.nio.ByteBuffer
-import java.nio.channels.Channels
 import java.nio.channels.SeekableByteChannel
 import java.security.MessageDigest
 import javax.crypto.Cipher
@@ -56,7 +54,11 @@ object VaultFiles {
     fun sha256(s: InputStream): String {
         val md = MessageDigest.getInstance("SHA-256")
         val b = ByteArray(CHUNK)
-        while (true) { val n = s.read(b); if (n < 0) break; md.update(b, 0, n) }
+        while (true) {
+            val n = s.read(b)
+            if (n < 0) break
+            md.update(b, 0, n)
+        }
         return md.digest().joinToString("") { "%02x".format(it) }
     }
 
@@ -67,16 +69,26 @@ object VaultFiles {
      * is fsynced, then renamed over [dest]. The temp file is removed on any failure.
      * @throws IllegalStateException when the final rename fails.
      */
-    fun encryptAtomic(key: SecretKey, src: InputStream, dest: File) {
+    fun encryptAtomic(
+        key: SecretKey,
+        src: InputStream,
+        dest: File,
+    ) {
         val tmp = File(dest.parentFile, dest.name + ".tmp")
         try {
             FileOutputStream(tmp).use { fos ->
                 fos.write(MAGIC)
                 // Closing Tink's stream writes the final segment and would close fos; shield it so we can fsync first.
-                val shielded = object : FilterOutputStream(fos) {
-                    override fun write(b: ByteArray, off: Int, len: Int) = out.write(b, off, len)
-                    override fun close() = flush()
-                }
+                val shielded =
+                    object : FilterOutputStream(fos) {
+                        override fun write(
+                            b: ByteArray,
+                            off: Int,
+                            len: Int,
+                        ) = out.write(b, off, len)
+
+                        override fun close() = flush()
+                    }
                 aead(key).newEncryptingStream(shielded, associatedData(dest)).use { out -> src.copyTo(out, CHUNK) }
                 fos.fd.sync()
             }
@@ -90,7 +102,10 @@ object VaultFiles {
      * Rewrites a legacy v1 [file] in the streaming format, in place and atomically. A no-op for v2 files.
      * Needed once per old video before it can be played without a plaintext temp file.
      */
-    fun upgradeToStreaming(key: SecretKey, file: File) {
+    fun upgradeToStreaming(
+        key: SecretKey,
+        file: File,
+    ) {
         if (formatOf(file) == Format.STREAMING) return
         decryptStream(key, file).use { encryptAtomic(key, it, file) }
     }
@@ -104,11 +119,15 @@ object VaultFiles {
      * Opens [file] for sequential decryption in either format. Authentication failures surface as an IOException while reading.
      * Closing the returned stream closes the file.
      */
-    fun decryptStream(key: SecretKey, file: File): InputStream {
+    fun decryptStream(
+        key: SecretKey,
+        file: File,
+    ): InputStream {
         val fis = FileInputStream(file)
         try {
-            return if (hasMagic(fis)) aead(key).newDecryptingStream(fis, associatedData(file))
-            else {
+            return if (hasMagic(fis)) {
+                aead(key).newDecryptingStream(fis, associatedData(file))
+            } else {
                 fis.channel.position(0)
                 val iv = ByteArray(12).also { check(fis.read(it) == 12) }
                 val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv)) }
@@ -124,7 +143,10 @@ object VaultFiles {
      * Opens a v2 file as a random-access plaintext channel: reading at any position decrypts only the segments touched.
      * The caller must close it. Throws [IllegalArgumentException] for legacy files; call [upgradeToStreaming] first.
      */
-    fun openSeekable(key: SecretKey, file: File): SeekableByteChannel {
+    fun openSeekable(
+        key: SecretKey,
+        file: File,
+    ): SeekableByteChannel {
         require(formatOf(file) == Format.STREAMING) { "legacy file: upgrade first" }
         val raf = java.io.RandomAccessFile(file, "r")
         return aead(key).newSeekableDecryptingChannel(OffsetChannel(raf.channel, MAGIC.size.toLong()), associatedData(file))
@@ -141,7 +163,11 @@ object VaultFiles {
     private fun hasMagic(s: InputStream): Boolean {
         val head = ByteArray(MAGIC.size)
         var read = 0
-        while (read < head.size) { val n = s.read(head, read, head.size - read); if (n < 0) break; read += n }
+        while (read < head.size) {
+            val n = s.read(head, read, head.size - read)
+            if (n < 0) break
+            read += n
+        }
         return read == head.size && head.contentEquals(MAGIC)
     }
 
@@ -156,15 +182,29 @@ object VaultFiles {
     private fun associatedData(file: File): ByteArray = file.name.removeSuffix(".tmp").toByteArray()
 
     /** A read-only view of [delegate] that hides the first [offset] bytes, so Tink sees the stream start at 0. */
-    private class OffsetChannel(private val delegate: java.nio.channels.FileChannel, private val offset: Long) : SeekableByteChannel {
+    private class OffsetChannel(
+        private val delegate: java.nio.channels.FileChannel,
+        private val offset: Long,
+    ) : SeekableByteChannel {
         private var pos = 0L
+
         override fun read(dst: ByteBuffer): Int = delegate.read(dst, offset + pos).also { if (it > 0) pos += it }
+
         override fun position(): Long = pos
-        override fun position(newPosition: Long): SeekableByteChannel { pos = newPosition; return this }
+
+        override fun position(newPosition: Long): SeekableByteChannel {
+            pos = newPosition
+            return this
+        }
+
         override fun size(): Long = delegate.size() - offset
+
         override fun write(src: ByteBuffer): Int = throw UnsupportedOperationException("read-only")
+
         override fun truncate(size: Long): SeekableByteChannel = throw UnsupportedOperationException("read-only")
+
         override fun isOpen(): Boolean = delegate.isOpen
+
         override fun close() = delegate.close()
     }
 }

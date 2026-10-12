@@ -38,7 +38,15 @@ class ImportFormatsTest {
         VaultDatabase.destroy(context)
         VaultRepository.reset()
         VaultStorage.directory(context).listFiles()?.forEach { it.delete() }
-        val bip39 = Bip39(context.assets.open("bip39_english.txt").bufferedReader().readLines().map { it.trim() }.filter { it.isNotEmpty() })
+        val bip39 =
+            Bip39(
+                context.assets
+                    .open("bip39_english.txt")
+                    .bufferedReader()
+                    .readLines()
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() },
+            )
         keys.setUp(pin, bip39)
         VaultApp.sessionKey = checkNotNull(keys.unlockWithPin(pin))
     }
@@ -52,14 +60,24 @@ class ImportFormatsTest {
     }
 
     /** The MIME type the importer should store for each sample, by extension. */
-    private val expectedMime = mapOf(
-        "jpg" to "image/jpeg", "png" to "image/png", "gif" to "image/gif",
-        "heic" to "image/heic", "mp4" to "video/mp4", "txt" to "text/plain",
-    )
+    private val expectedMime =
+        mapOf(
+            "jpg" to "image/jpeg",
+            "png" to "image/png",
+            "gif" to "image/gif",
+            "heic" to "image/heic",
+            "mp4" to "video/mp4",
+            "txt" to "text/plain",
+        )
 
     @Test fun everySampleImportsWithItsTypeSizeAndDimensionsOrDuration() {
         val dir = File(context.filesDir, "samples")
-        val samples = dir.listFiles().orEmpty().filter { it.isFile }.sortedBy { it.name }
+        val samples =
+            dir
+                .listFiles()
+                .orEmpty()
+                .filter { it.isFile }
+                .sortedBy { it.name }
         assumeTrue("needs filesDir/samples (scripts/device-checks.sh formats)", samples.isNotEmpty())
 
         val problems = mutableListOf<String>()
@@ -76,7 +94,10 @@ class ImportFormatsTest {
         }
         for (sample in media) {
             val item = items.singleOrNull { it.name == sample.name }
-            if (item == null) { problems += "not stored: ${sample.name}"; continue }
+            if (item == null) {
+                problems += "not stored: ${sample.name}"
+                continue
+            }
             val ext = sample.extension.lowercase()
             expectedMime[ext]?.let { mime -> if (item.mimeType != mime) problems += "${sample.name}: type ${item.mimeType}, expected $mime" }
             if (item.sizeBytes != sample.length()) problems += "${sample.name}: stored ${item.sizeBytes} bytes, file has ${sample.length()}"

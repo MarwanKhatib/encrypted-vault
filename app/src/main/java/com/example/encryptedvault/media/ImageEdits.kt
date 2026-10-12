@@ -10,31 +10,64 @@ import kotlin.math.ceil
 import kotlin.math.floor
 
 /** Crop shapes offered by the editor; ratio is width / height of the result (null = unlocked, drag freely). */
-enum class CropAspect(val label: String, val ratio: Float?) {
-    FREE("Free", null), SQUARE("1:1", 1f), FOUR_THREE("4:3", 4f / 3f), THREE_FOUR("3:4", 3f / 4f), SIXTEEN_NINE("16:9", 16f / 9f), NINE_SIXTEEN("9:16", 9f / 16f)
+enum class CropAspect(
+    val label: String,
+    val ratio: Float?,
+) {
+    FREE("Free", null),
+    SQUARE("1:1", 1f),
+    FOUR_THREE("4:3", 4f / 3f),
+    THREE_FOUR("3:4", 3f / 4f),
+    SIXTEEN_NINE("16:9", 16f / 9f),
+    NINE_SIXTEEN("9:16", 9f / 16f),
 }
 
 /** Corner of the crop frame that the user drags. */
-enum class CropCorner(val onLeft: Boolean, val onTop: Boolean) {
-    TOP_LEFT(onLeft = true, onTop = true), TOP_RIGHT(onLeft = false, onTop = true),
-    BOTTOM_LEFT(onLeft = true, onTop = false), BOTTOM_RIGHT(onLeft = false, onTop = false),
+enum class CropCorner(
+    val onLeft: Boolean,
+    val onTop: Boolean,
+) {
+    TOP_LEFT(onLeft = true, onTop = true),
+    TOP_RIGHT(onLeft = false, onTop = true),
+    BOTTOM_LEFT(onLeft = true, onTop = false),
+    BOTTOM_RIGHT(onLeft = false, onTop = false),
 }
 
 /** One-tap looks, applied before the manual sliders. */
-enum class PhotoFilter(val label: String) { NONE("Original"), VIVID("Vivid"), WARM("Warm"), COOL("Cool"), MONO("Mono"), FADE("Fade") }
+enum class PhotoFilter(
+    val label: String,
+) {
+    NONE("Original"),
+    VIVID("Vivid"),
+    WARM("Warm"),
+    COOL("Cool"),
+    MONO("Mono"),
+    FADE("Fade"),
+}
 
 /**
  * Crop frame as fractions (0..1) of the oriented image, so it is the same at preview and full resolution.
  * (0, 0, 1, 1) keeps the whole picture.
  */
-data class CropBox(val left: Float = 0f, val top: Float = 0f, val right: Float = 1f, val bottom: Float = 1f) {
+data class CropBox(
+    val left: Float = 0f,
+    val top: Float = 0f,
+    val right: Float = 1f,
+    val bottom: Float = 1f,
+) {
     val isFull get() = this == CropBox()
 
     /**
      * Moves [corner] by ([dx], [dy]) image fractions while the opposite corner stays put.
      * [imageAspect] is the oriented image's width / height. A non-null [ratio] (output width / height) keeps the frame at that shape.
      */
-    fun dragCorner(corner: CropCorner, dx: Float, dy: Float, imageAspect: Float, ratio: Float?): CropBox {
+    fun dragCorner(
+        corner: CropCorner,
+        dx: Float,
+        dy: Float,
+        imageAspect: Float,
+        ratio: Float?,
+    ): CropBox {
         val fixedX = if (corner.onLeft) right else left
         val fixedY = if (corner.onTop) bottom else top
         val dirX = if (corner.onLeft) -1f else 1f
@@ -57,7 +90,10 @@ data class CropBox(val left: Float = 0f, val top: Float = 0f, val right: Float =
     }
 
     /** Crop as left, top, width, height in pixels of a [width] × [height] image. Always at least 1 px. */
-    fun pixelRect(width: Int, height: Int): IntArray {
+    fun pixelRect(
+        width: Int,
+        height: Int,
+    ): IntArray {
         val l = floor(left * width).toInt().coerceIn(0, width - 1)
         val t = floor(top * height).toInt().coerceIn(0, height - 1)
         val r = ceil(right * width).toInt().coerceIn(l + 1, width)
@@ -65,7 +101,10 @@ data class CropBox(val left: Float = 0f, val top: Float = 0f, val right: Float =
         return intArrayOf(l, t, r - l, b - t)
     }
 
-    private fun clampSide(value: Float, max: Float) = value.coerceAtLeast(MIN_SIDE).coerceAtMost(max)
+    private fun clampSide(
+        value: Float,
+        max: Float,
+    ) = value.coerceAtLeast(MIN_SIDE).coerceAtMost(max)
 
     private companion object {
         /** Smallest side as a fraction of the image, so the frame cannot collapse to nothing. */
@@ -95,14 +134,19 @@ data class Edit(
     fun flipped() = copy(flipHorizontal = !flipHorizontal, crop = CropBox())
 
     /** Selects [preset]; a ratio preset centres the largest frame of that shape on an image of [imageAspect]. */
-    fun withAspect(preset: CropAspect, imageAspect: Float) =
-        copy(aspect = preset, crop = preset.ratio?.let { ImageEdits.presetCrop(it, imageAspect) } ?: crop)
+    fun withAspect(
+        preset: CropAspect,
+        imageAspect: Float,
+    ) = copy(aspect = preset, crop = preset.ratio?.let { ImageEdits.presetCrop(it, imageAspect) } ?: crop)
 }
 
 /** Applies an [Edit] to a bitmap. The crop and colour-matrix math is pure so it is unit-tested; only [apply] needs Android. */
 object ImageEdits {
     /** Largest centred frame of [ratio] (w/h) on an image of [imageAspect] (w/h), as fractions. */
-    fun presetCrop(ratio: Float, imageAspect: Float): CropBox =
+    fun presetCrop(
+        ratio: Float,
+        imageAspect: Float,
+    ): CropBox =
         if (ratio >= imageAspect) {
             val h = imageAspect / ratio
             CropBox(0f, (1f - h) / 2f, 1f, (1f + h) / 2f)
@@ -112,7 +156,11 @@ object ImageEdits {
         }
 
     /** Width / height of the image after rotating it by [rotation] degrees (a multiple of 90). */
-    fun orientedAspect(width: Int, height: Int, rotation: Int): Float {
+    fun orientedAspect(
+        width: Int,
+        height: Int,
+        rotation: Int,
+    ): Float {
         val aspect = width.toFloat() / height
         return if (rotation % 180 == 0) aspect else 1f / aspect
     }
@@ -126,11 +174,20 @@ object ImageEdits {
             PhotoFilter.WARM -> m.postConcat(ColorMatrix(floatArrayOf(1.08f, 0f, 0f, 0f, 6f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 0.9f, 0f, -6f, 0f, 0f, 0f, 1f, 0f)))
             PhotoFilter.COOL -> m.postConcat(ColorMatrix(floatArrayOf(0.92f, 0f, 0f, 0f, -6f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1.08f, 0f, 6f, 0f, 0f, 0f, 1f, 0f)))
             PhotoFilter.MONO -> m.postConcat(saturate(0f))
-            PhotoFilter.FADE -> m.postConcat(contrast(0.85f).also { it.postConcat(ColorMatrix(floatArrayOf(1f, 0f, 0f, 0f, 20f, 0f, 1f, 0f, 0f, 20f, 0f, 0f, 1f, 0f, 20f, 0f, 0f, 0f, 1f, 0f))) })
+            PhotoFilter.FADE ->
+                m.postConcat(
+                    contrast(0.85f).also {
+                        it.postConcat(ColorMatrix(floatArrayOf(1f, 0f, 0f, 0f, 20f, 0f, 1f, 0f, 0f, 20f, 0f, 0f, 1f, 0f, 20f, 0f, 0f, 0f, 1f, 0f)))
+                    },
+                )
         }
         m.postConcat(saturate(e.saturation))
         m.postConcat(contrast(e.contrast))
-        m.postConcat(ColorMatrix(floatArrayOf(1f, 0f, 0f, 0f, e.brightness * 255f, 0f, 1f, 0f, 0f, e.brightness * 255f, 0f, 0f, 1f, 0f, e.brightness * 255f, 0f, 0f, 0f, 1f, 0f)))
+        m.postConcat(
+            ColorMatrix(
+                floatArrayOf(1f, 0f, 0f, 0f, e.brightness * 255f, 0f, 1f, 0f, 0f, e.brightness * 255f, 0f, 0f, 1f, 0f, e.brightness * 255f, 0f, 0f, 0f, 1f, 0f),
+            ),
+        )
         return m.array
     }
 
@@ -144,12 +201,16 @@ object ImageEdits {
     }
 
     /** Returns a new bitmap with [e] applied: orientation first, then crop, then colour. */
-    fun apply(src: Bitmap, e: Edit): Bitmap {
+    fun apply(
+        src: Bitmap,
+        e: Edit,
+    ): Bitmap {
         if (e.isIdentity) return src
-        val geometry = Matrix().apply {
-            if (e.flipHorizontal) postScale(-1f, 1f, src.width / 2f, src.height / 2f)
-            if (e.rotation != 0) postRotate(e.rotation.toFloat(), src.width / 2f, src.height / 2f)
-        }
+        val geometry =
+            Matrix().apply {
+                if (e.flipHorizontal) postScale(-1f, 1f, src.width / 2f, src.height / 2f)
+                if (e.rotation != 0) postRotate(e.rotation.toFloat(), src.width / 2f, src.height / 2f)
+            }
         val oriented = Bitmap.createBitmap(src, 0, 0, src.width, src.height, geometry, true)
         val (l, t, w, h) = e.crop.pixelRect(oriented.width, oriented.height)
         val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)

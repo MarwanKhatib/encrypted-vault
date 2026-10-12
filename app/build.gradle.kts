@@ -4,13 +4,27 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
+    id("org.jlleitschuh.gradle.ktlint")
+    id("io.gitlab.arturbosch.detekt")
+}
+
+// Static checks: `./gradlew ktlintCheck detekt`. Fix formatting with `./gradlew ktlintFormat`.
+ktlint {
+    version.set("1.3.1")
+}
+
+detekt {
+    buildUponDefaultConfig = true
+    config.setFrom(rootProject.file("config/detekt/detekt.yml"))
+    source.setFrom("src/main/java", "src/test/java", "src/androidTest/java")
 }
 
 // Release signing comes from keystore.properties in the project root (git-ignored; see keystore.properties.example).
 // Without it, release falls back to the debug key so local installs still work, and the build says so.
-val releaseKeystore: Properties? = rootProject.file("keystore.properties").takeIf { it.exists() }?.let { file ->
-    Properties().apply { file.inputStream().use { load(it) } }
-}
+val releaseKeystore: Properties? =
+    rootProject.file("keystore.properties").takeIf { it.exists() }?.let { file ->
+        Properties().apply { file.inputStream().use { load(it) } }
+    }
 if (releaseKeystore == null) logger.warn("keystore.properties not found: release APK is signed with the debug key. Do not distribute it.")
 
 android {
@@ -27,7 +41,10 @@ android {
     }
     // Lets MigrationTestHelper read the exported Room schemas in instrumented tests.
     sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
-    buildFeatures { compose = true; buildConfig = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
     signingConfigs {
         releaseKeystore?.let { props ->
             create("release") {

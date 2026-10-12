@@ -26,9 +26,21 @@ import com.example.encryptedvault.data.VaultItem
 
 /** iOS-style album tile: rounded square cover with the title and item count *below* it. */
 @Composable
-fun AlbumTile(title: String, count: Int?, cover: VaultItem?, onClick: () -> Unit, size: Dp = 150.dp) {
+fun AlbumTile(
+    title: String,
+    count: Int?,
+    cover: VaultItem?,
+    onClick: () -> Unit,
+    size: Dp = 150.dp,
+) {
     Column(Modifier.width(size).clickable(onClick = onClick)) {
-        Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        ) {
             if (cover != null) {
                 val bitmap by rememberThumbnail(cover)
                 bitmap?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }

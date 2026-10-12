@@ -40,11 +40,20 @@ data class PhotoEntity(
     /** AES-GCM encrypted [PhotoMetadata]; null until the worker writes it. */
     val metaEnc: ByteArray? = null,
 ) {
-    override fun equals(other: Any?) = other is PhotoEntity && id == other.id && hash == other.hash &&
-        timestamp == other.timestamp && status == other.status && size == other.size &&
-        favorite == other.favorite && deletedAt == other.deletedAt && durationMs == other.durationMs &&
-        hidden == other.hidden && width == other.width && height == other.height &&
-        metaEnc.contentEquals(other.metaEnc)
+    override fun equals(other: Any?) =
+        other is PhotoEntity &&
+            id == other.id &&
+            hash == other.hash &&
+            timestamp == other.timestamp &&
+            status == other.status &&
+            size == other.size &&
+            favorite == other.favorite &&
+            deletedAt == other.deletedAt &&
+            durationMs == other.durationMs &&
+            hidden == other.hidden &&
+            width == other.width &&
+            height == other.height &&
+            metaEnc.contentEquals(other.metaEnc)
 
     override fun hashCode() = 31 * id.hashCode() + hash.hashCode()
 }
@@ -59,7 +68,10 @@ class AlbumEntity(
 
 /** Join row linking one item to one album; (albumId, photoId) is the composite primary key. */
 @Entity(tableName = "album_items", primaryKeys = ["albumId", "photoId"])
-data class AlbumItemEntity(val albumId: Long, val photoId: Long)
+data class AlbumItemEntity(
+    val albumId: Long,
+    val photoId: Long,
+)
 
 /** Queries and updates for the `photos` table. Suspend queries run off the main thread (Room's default). */
 @Dao
@@ -86,19 +98,31 @@ interface PhotoDao {
 
     /** Sets the favourite flag on all [ids] in one statement. */
     @Query("UPDATE photos SET favorite = :favorite WHERE id IN (:ids)")
-    suspend fun setFavorite(ids: List<Long>, favorite: Boolean)
+    suspend fun setFavorite(
+        ids: List<Long>,
+        favorite: Boolean,
+    )
 
     /** [deletedAt] = 0 restores from Recently Deleted. */
     @Query("UPDATE photos SET deletedAt = :deletedAt WHERE id IN (:ids)")
-    suspend fun setDeletedAt(ids: List<Long>, deletedAt: Long)
+    suspend fun setDeletedAt(
+        ids: List<Long>,
+        deletedAt: Long,
+    )
 
     /** Sets the hidden flag on all [ids]; hidden items leave the Library and show only in the Hidden collection. */
     @Query("UPDATE photos SET hidden = :hidden WHERE id IN (:ids)")
-    suspend fun setHidden(ids: List<Long>, hidden: Boolean)
+    suspend fun setHidden(
+        ids: List<Long>,
+        hidden: Boolean,
+    )
 
     /** Replaces only the encrypted metadata blob of row [id]. */
     @Query("UPDATE photos SET metaEnc = :metaEnc WHERE id = :id")
-    suspend fun updateMeta(id: Long, metaEnc: ByteArray)
+    suspend fun updateMeta(
+        id: Long,
+        metaEnc: ByteArray,
+    )
 
     /** Rows moved to Recently Deleted before [cutoff] (epoch ms): the candidates for the 30-day purge. */
     @Query("SELECT * FROM photos WHERE deletedAt > 0 AND deletedAt < :cutoff")
@@ -126,7 +150,10 @@ interface AlbumDao {
 
     /** Replaces the encrypted title of album [id]. */
     @Query("UPDATE albums SET nameEnc = :nameEnc WHERE id = :id")
-    suspend fun rename(id: Long, nameEnc: ByteArray)
+    suspend fun rename(
+        id: Long,
+        nameEnc: ByteArray,
+    )
 
     /** Deletes the album row only. Remove its links first with [deleteLinksOfAlbum]; the items themselves are untouched. */
     @Query("DELETE FROM albums WHERE id = :id")
@@ -142,7 +169,10 @@ interface AlbumDao {
 
     /** Removes the given items from one album. */
     @Query("DELETE FROM album_items WHERE albumId = :albumId AND photoId IN (:photoIds)")
-    suspend fun removeLinks(albumId: Long, photoIds: List<Long>)
+    suspend fun removeLinks(
+        albumId: Long,
+        photoIds: List<Long>,
+    )
 
     /** Removes the given items from every album (called before deleting them). */
     @Query("DELETE FROM album_items WHERE photoId IN (:photoIds)")
@@ -158,6 +188,7 @@ interface AlbumDao {
 abstract class VaultDatabase : RoomDatabase() {
     /** Data access for the `photos` table. */
     abstract fun photoDao(): PhotoDao
+
     /** Data access for albums and album membership. */
     abstract fun albumDao(): AlbumDao
 
@@ -165,75 +196,83 @@ abstract class VaultDatabase : RoomDatabase() {
         // Every schema change needs a real Migration. NEVER add fallbackToDestructiveMigration() (Gap 11).
 
         /** v1 -> v2: file name, size and favourite flag. */
-        val MIGRATION_1_2 = object : Migration(1, 2) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE photos ADD COLUMN name TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE photos ADD COLUMN size INTEGER NOT NULL DEFAULT 0")
-                db.execSQL("ALTER TABLE photos ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0")
+        val MIGRATION_1_2 =
+            object : Migration(1, 2) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE photos ADD COLUMN name TEXT NOT NULL DEFAULT ''")
+                    db.execSQL("ALTER TABLE photos ADD COLUMN size INTEGER NOT NULL DEFAULT 0")
+                    db.execSQL("ALTER TABLE photos ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0")
+                }
             }
-        }
 
         /**
          * v2 -> v3: moves the clear-text `name` column into encrypted metadata (dropped here, since the
          * key is unavailable during migration), adds trash/duration/metadata, people and albums.
          */
-        val MIGRATION_2_3 = object : Migration(2, 3) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL(
-                    "CREATE TABLE photos_new (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, hash TEXT NOT NULL, " +
-                        "mimeType TEXT NOT NULL, timestamp INTEGER NOT NULL, status TEXT NOT NULL, " +
-                        "size INTEGER NOT NULL DEFAULT 0, favorite INTEGER NOT NULL DEFAULT 0, " +
-                        "deletedAt INTEGER NOT NULL DEFAULT 0, durationMs INTEGER NOT NULL DEFAULT 0, metaEnc BLOB)"
-                )
-                db.execSQL(
-                    "INSERT INTO photos_new (id, hash, mimeType, timestamp, status, size, favorite) " +
-                        "SELECT id, hash, mimeType, timestamp, status, size, favorite FROM photos"
-                )
-                db.execSQL("DROP TABLE photos")
-                db.execSQL("ALTER TABLE photos_new RENAME TO photos")
-                db.execSQL("CREATE UNIQUE INDEX index_photos_hash ON photos (hash)")
-                db.execSQL("CREATE TABLE people (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, nameEnc BLOB NOT NULL)")
-                db.execSQL("CREATE TABLE albums (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, nameEnc BLOB NOT NULL)")
-                db.execSQL(
-                    "CREATE TABLE album_items (albumId INTEGER NOT NULL, photoId INTEGER NOT NULL, " +
-                        "PRIMARY KEY (albumId, photoId))"
-                )
+        val MIGRATION_2_3 =
+            object : Migration(2, 3) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE TABLE photos_new (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, hash TEXT NOT NULL, " +
+                            "mimeType TEXT NOT NULL, timestamp INTEGER NOT NULL, status TEXT NOT NULL, " +
+                            "size INTEGER NOT NULL DEFAULT 0, favorite INTEGER NOT NULL DEFAULT 0, " +
+                            "deletedAt INTEGER NOT NULL DEFAULT 0, durationMs INTEGER NOT NULL DEFAULT 0, metaEnc BLOB)",
+                    )
+                    db.execSQL(
+                        "INSERT INTO photos_new (id, hash, mimeType, timestamp, status, size, favorite) " +
+                            "SELECT id, hash, mimeType, timestamp, status, size, favorite FROM photos",
+                    )
+                    db.execSQL("DROP TABLE photos")
+                    db.execSQL("ALTER TABLE photos_new RENAME TO photos")
+                    db.execSQL("CREATE UNIQUE INDEX index_photos_hash ON photos (hash)")
+                    db.execSQL("CREATE TABLE people (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, nameEnc BLOB NOT NULL)")
+                    db.execSQL("CREATE TABLE albums (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, nameEnc BLOB NOT NULL)")
+                    db.execSQL(
+                        "CREATE TABLE album_items (albumId INTEGER NOT NULL, photoId INTEGER NOT NULL, " +
+                            "PRIMARY KEY (albumId, photoId))",
+                    )
+                }
             }
-        }
 
         /** v3 -> v4: hidden flag and pixel size. */
-        val MIGRATION_3_4 = object : Migration(3, 4) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE photos ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
-                db.execSQL("ALTER TABLE photos ADD COLUMN width INTEGER NOT NULL DEFAULT 0")
-                db.execSQL("ALTER TABLE photos ADD COLUMN height INTEGER NOT NULL DEFAULT 0")
+        val MIGRATION_3_4 =
+            object : Migration(3, 4) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE photos ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
+                    db.execSQL("ALTER TABLE photos ADD COLUMN width INTEGER NOT NULL DEFAULT 0")
+                    db.execSQL("ALTER TABLE photos ADD COLUMN height INTEGER NOT NULL DEFAULT 0")
+                }
             }
-        }
 
         /** v4 -> v5: the People feature was removed, so its table goes away. Photos and albums are untouched. */
-        val MIGRATION_4_5 = object : Migration(4, 5) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("DROP TABLE IF EXISTS people")
+        val MIGRATION_4_5 =
+            object : Migration(4, 5) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("DROP TABLE IF EXISTS people")
+                }
             }
-        }
 
         val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 
         @Volatile private var instance: VaultDatabase? = null
 
         /** Single instance so Flow invalidation reaches the UI when workers write. */
-        fun get(context: Context): VaultDatabase = instance ?: synchronized(this) {
-            instance ?: Room.databaseBuilder(context.applicationContext, VaultDatabase::class.java, DB_NAME)
-                .addMigrations(*MIGRATIONS)
-                .build().also { instance = it }
-        }
+        fun get(context: Context): VaultDatabase =
+            instance ?: synchronized(this) {
+                instance ?: Room
+                    .databaseBuilder(context.applicationContext, VaultDatabase::class.java, DB_NAME)
+                    .addMigrations(*MIGRATIONS)
+                    .build()
+                    .also { instance = it }
+            }
 
         /** Closes the database and deletes `vault.db` with its WAL/SHM files (used by the duress wipe). The next [get] creates an empty one. */
-        fun destroy(context: Context) = synchronized(this) {
-            instance?.close()
-            instance = null
-            context.applicationContext.deleteDatabase(DB_NAME)
-        }
+        fun destroy(context: Context) =
+            synchronized(this) {
+                instance?.close()
+                instance = null
+                context.applicationContext.deleteDatabase(DB_NAME)
+            }
 
         private const val DB_NAME = "vault.db"
     }

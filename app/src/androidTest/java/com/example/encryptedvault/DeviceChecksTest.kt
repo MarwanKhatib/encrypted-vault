@@ -44,7 +44,15 @@ class DeviceChecksTest {
         VaultDatabase.destroy(context)
         VaultStorage.directory(context).listFiles()?.forEach { it.delete() }
         File(context.cacheDir, MediaTransfer.IMPORT_DIR).deleteRecursively()
-        bip39 = Bip39(context.assets.open("bip39_english.txt").bufferedReader().readLines().map { it.trim() }.filter { it.isNotEmpty() })
+        bip39 =
+            Bip39(
+                context.assets
+                    .open("bip39_english.txt")
+                    .bufferedReader()
+                    .readLines()
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() },
+            )
     }
 
     @After fun tearDown() {
@@ -60,32 +68,58 @@ class DeviceChecksTest {
     }
 
     /** A noisy JPEG so each file is large and distinct. Optionally tagged with a GPS location. */
-    private fun jpeg(file: File, seed: Long, gps: Boolean = false): File {
+    private fun jpeg(
+        file: File,
+        seed: Long,
+        gps: Boolean = false,
+    ): File {
         val bitmap = Bitmap.createBitmap(640, 480, Bitmap.Config.ARGB_8888)
         val random = Random(seed)
         bitmap.setPixels(IntArray(640 * 480) { random.nextInt() }, 0, 640, 0, 0, 640, 480)
         file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
-        if (gps) ExifInterface(file.path).apply { setLatLong(37.7749, -122.4194); saveAttributes() }
+        if (gps) {
+            ExifInterface(file.path).apply {
+                setLatLong(37.7749, -122.4194)
+                saveAttributes()
+            }
+        }
         return file
     }
 
-    private fun stagedCopy(source: File, name: String): MediaTransfer.StagedFile {
+    private fun stagedCopy(
+        source: File,
+        name: String,
+    ): MediaTransfer.StagedFile {
         val dir = File(context.cacheDir, MediaTransfer.IMPORT_DIR).apply { mkdirs() }
         val copy = File(dir, "${System.nanoTime()}.jpg").also { source.copyTo(it) }
         return MediaTransfer.StagedFile(copy.path, SourceInfo(name, "DCIM/Camera", System.currentTimeMillis()))
     }
 
-    private fun completeRows(hash: String) = runBlocking {
-        VaultDatabase.get(context).photoDao().allCompleted().count { it.hash == hash }
-    }
+    private fun completeRows(hash: String) =
+        runBlocking {
+            VaultDatabase
+                .get(context)
+                .photoDao()
+                .allCompleted()
+                .count { it.hash == hash }
+        }
 
-    private fun pendingCount(): Int = VaultDatabase.get(context).openHelper.readableDatabase
-        .query("SELECT COUNT(*) FROM photos WHERE status != 'complete'").use { it.moveToFirst(); it.getInt(0) }
+    private fun pendingCount(): Int =
+        VaultDatabase
+            .get(context)
+            .openHelper.readableDatabase
+            .query("SELECT COUNT(*) FROM photos WHERE status != 'complete'")
+            .use {
+                it.moveToFirst()
+                it.getInt(0)
+            }
 
     @Test fun encryptingTheSamePhotoTwiceMakesOneEntry() {
         unlockedVault()
         val source = jpeg(File(context.cacheDir, "dup-source.jpg"), seed = 1)
-        val hash = com.example.encryptedvault.crypto.VaultFiles.sha256(source)
+        val hash =
+            com.example.encryptedvault.crypto.VaultFiles
+                .sha256(source)
         assertTrue("first import succeeds", runBlocking { ImportWorker.importAndWait(context, stagedCopy(source, "IMG_1.jpg")) })
         assertTrue("second import succeeds", runBlocking { ImportWorker.importAndWait(context, stagedCopy(source, "IMG_1 copy.jpg")) })
         assertEquals("exactly one entry for the double tap", 1, completeRows(hash))
@@ -117,6 +151,7 @@ class DeviceChecksTest {
         assertNotNull("HEIC decodes through ImageDecoder", thumbnail)
         assertTrue("thumbnail is no larger than the edge limit", maxOf(thumbnail!!.width, thumbnail.height) <= 256)
     }
+
     /** Needs a real MP4 at the app files path filesDir/sample.mp4. `scripts/device-checks.sh` copies one there with run-as. */
     @Test fun mp4VideoGetsADurationAndAFrame() {
         val video = File(context.filesDir, "sample.mp4")

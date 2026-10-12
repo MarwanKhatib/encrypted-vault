@@ -36,7 +36,11 @@ object BackupCrypto {
     private const val AES_BITS = 256
 
     /** Writes the header to [out] and returns a stream that encrypts what is written to it. Closing it writes the final chunk and closes [out]. */
-    fun encrypting(out: OutputStream, passphrase: CharArray, random: SecureRandom = SecureRandom()): OutputStream {
+    fun encrypting(
+        out: OutputStream,
+        passphrase: CharArray,
+        random: SecureRandom = SecureRandom(),
+    ): OutputStream {
         val salt = ByteArray(SALT_BYTES).also { random.nextBytes(it) }
         val baseNonce = ByteArray(NONCE_BYTES).also { random.nextBytes(it) }
         val data = DataOutputStream(out)
@@ -50,7 +54,10 @@ object BackupCrypto {
     }
 
     /** Reads and checks the header of [input] and returns a stream of the decrypted body. Any failure throws [IOException]. */
-    fun decrypting(input: InputStream, passphrase: CharArray): InputStream {
+    fun decrypting(
+        input: InputStream,
+        passphrase: CharArray,
+    ): InputStream {
         val data = DataInputStream(input)
         val magic = ByteArray(MAGIC.size).also { data.readFully(it) }
         if (!magic.contentEquals(MAGIC)) throw IOException("Not a vault backup file")
@@ -63,17 +70,25 @@ object BackupCrypto {
         return DecryptingStream(data, deriveKey(passphrase, salt, iterations), baseNonce)
     }
 
-    private fun deriveKey(passphrase: CharArray, salt: ByteArray, iterations: Int): SecretKeySpec {
+    private fun deriveKey(
+        passphrase: CharArray,
+        salt: ByteArray,
+        iterations: Int,
+    ): SecretKeySpec {
         val spec = PBEKeySpec(passphrase, salt, iterations, AES_BITS)
-        val bytes = try {
-            SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
-        } finally {
-            spec.clearPassword()
-        }
+        val bytes =
+            try {
+                SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
+            } finally {
+                spec.clearPassword()
+            }
         return SecretKeySpec(bytes, "AES").also { bytes.fill(0) }
     }
 
-    private fun nonceFor(base: ByteArray, index: Long): ByteArray {
+    private fun nonceFor(
+        base: ByteArray,
+        index: Long,
+    ): ByteArray {
         val nonce = base.copyOf()
         val counter = ByteBuffer.allocate(Long.SIZE_BYTES).putLong(index).array()
         for (i in counter.indices) {
@@ -83,10 +98,23 @@ object BackupCrypto {
         return nonce
     }
 
-    private fun aad(index: Long, last: Boolean): ByteArray =
-        ByteBuffer.allocate(Long.SIZE_BYTES + 1).putLong(index).put(if (last) 1 else 0).array()
+    private fun aad(
+        index: Long,
+        last: Boolean,
+    ): ByteArray =
+        ByteBuffer
+            .allocate(Long.SIZE_BYTES + 1)
+            .putLong(index)
+            .put(if (last) 1 else 0)
+            .array()
 
-    private fun cipher(mode: Int, key: SecretKeySpec, baseNonce: ByteArray, index: Long, last: Boolean): Cipher =
+    private fun cipher(
+        mode: Int,
+        key: SecretKeySpec,
+        baseNonce: ByteArray,
+        index: Long,
+        last: Boolean,
+    ): Cipher =
         Cipher.getInstance("AES/GCM/NoPadding").apply {
             init(mode, key, GCMParameterSpec(TAG_BITS, nonceFor(baseNonce, index)))
             updateAAD(aad(index, last))
@@ -103,7 +131,11 @@ object BackupCrypto {
 
         override fun write(b: Int) = write(byteArrayOf(b.toByte()), 0, 1)
 
-        override fun write(b: ByteArray, off: Int, len: Int) {
+        override fun write(
+            b: ByteArray,
+            off: Int,
+            len: Int,
+        ) {
             check(!closed) { "Stream is closed" }
             var position = off
             var remaining = len
@@ -150,7 +182,11 @@ object BackupCrypto {
             return chunk[position++].toInt() and 0xFF
         }
 
-        override fun read(b: ByteArray, off: Int, len: Int): Int {
+        override fun read(
+            b: ByteArray,
+            off: Int,
+            len: Int,
+        ): Int {
             if (len == 0) return 0
             if (!fill()) return -1
             val take = minOf(len, chunk.size - position)
@@ -168,20 +204,22 @@ object BackupCrypto {
         }
 
         private fun openChunk() {
-            val last = when (input.readByte().toInt()) {
-                0 -> false
-                1 -> true
-                else -> throw IOException("Corrupt backup chunk")
-            }
+            val last =
+                when (input.readByte().toInt()) {
+                    0 -> false
+                    1 -> true
+                    else -> throw IOException("Corrupt backup chunk")
+                }
             val length = input.readInt()
             if (length !in TAG_BYTES..CHUNK_BYTES + TAG_BYTES) throw IOException("Corrupt backup chunk length")
             val sealed = ByteArray(length)
             input.readFully(sealed)
-            chunk = try {
-                cipher(Cipher.DECRYPT_MODE, key, baseNonce, index, last).doFinal(sealed)
-            } catch (e: GeneralSecurityException) {
-                throw IOException("Wrong passphrase or corrupted backup", e)
-            }
+            chunk =
+                try {
+                    cipher(Cipher.DECRYPT_MODE, key, baseNonce, index, last).doFinal(sealed)
+                } catch (e: GeneralSecurityException) {
+                    throw IOException("Wrong passphrase or corrupted backup", e)
+                }
             position = 0
             index++
             if (last) {

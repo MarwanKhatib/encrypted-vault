@@ -22,7 +22,11 @@ import java.io.InputStream
 import java.io.OutputStream
 
 /** Counts shown to the user after a restore. */
-data class RestoreReport(val imported: Int, val skipped: Int, val failed: Int)
+data class RestoreReport(
+    val imported: Int,
+    val skipped: Int,
+    val failed: Int,
+)
 
 /**
  * Encrypted export and restore of the whole vault (ADR-007).
@@ -33,7 +37,11 @@ data class RestoreReport(val imported: Int, val skipped: Int, val failed: Int)
  */
 object VaultBackup {
     /** Writes every item to [out] under [passphrase] and closes [out]. Returns the number of items written. */
-    suspend fun export(context: Context, passphrase: CharArray, out: OutputStream): Int {
+    suspend fun export(
+        context: Context,
+        passphrase: CharArray,
+        out: OutputStream,
+    ): Int {
         val key = checkNotNull(VaultApp.sessionKey) { "Vault is locked" }
         val repository = VaultRepository.get(context)
         val items = repository.items.first()
@@ -53,7 +61,11 @@ object VaultBackup {
     }
 
     /** Restores the backup in [input] into the unlocked vault and closes [input]. Throws [IOException] for a wrong passphrase or damaged file. */
-    suspend fun restore(context: Context, passphrase: CharArray, input: InputStream): RestoreReport {
+    suspend fun restore(
+        context: Context,
+        passphrase: CharArray,
+        input: InputStream,
+    ): RestoreReport {
         checkNotNull(VaultApp.sessionKey) { "Vault is locked" }
         val repository = VaultRepository.get(context)
         val dao = VaultDatabase.get(context).photoDao()
@@ -86,27 +98,35 @@ object VaultBackup {
         return RestoreReport(imported, skipped, failed)
     }
 
-    private fun VaultItem.toRecord(albums: List<String>) = BackupRecord(
-        hash = hash,
-        mimeType = mimeType,
-        takenAt = takenAt,
-        sizeBytes = sizeBytes,
-        durationMs = durationMs,
-        width = width,
-        height = height,
-        favorite = isFavorite,
-        hidden = isHidden,
-        trashed = isTrashed,
-        name = name,
-        folder = sourceFolder,
-        caption = caption,
-        albums = albums,
-    )
+    private fun VaultItem.toRecord(albums: List<String>) =
+        BackupRecord(
+            hash = hash,
+            mimeType = mimeType,
+            takenAt = takenAt,
+            sizeBytes = sizeBytes,
+            durationMs = durationMs,
+            width = width,
+            height = height,
+            favorite = isFavorite,
+            hidden = isHidden,
+            trashed = isTrashed,
+            name = name,
+            folder = sourceFolder,
+            caption = caption,
+            albums = albums,
+        )
 
     /** Writes the content to a staged file in the import folder and checks its hash. Returns null if the content does not match. */
-    private fun stageContent(context: Context, data: DataInputStream, record: BackupRecord): MediaTransfer.StagedFile? {
+    private fun stageContent(
+        context: Context,
+        data: DataInputStream,
+        record: BackupRecord,
+    ): MediaTransfer.StagedFile? {
         val dir = File(context.cacheDir, MediaTransfer.IMPORT_DIR).apply { mkdirs() }
-        val extension = android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(record.mimeType) ?: "bin"
+        val extension =
+            android.webkit.MimeTypeMap
+                .getSingleton()
+                .getExtensionFromMimeType(record.mimeType) ?: "bin"
         val file = File(dir, "${System.nanoTime()}.$extension")
         try {
             file.outputStream().use { BackupRecords.copyExactly(data, it, record.sizeBytes) }
@@ -122,8 +142,17 @@ object VaultBackup {
     }
 
     /** Re-applies the state that the import worker does not carry: favourite, hidden, caption, trash and albums. */
-    private suspend fun applyState(context: Context, repository: VaultRepository, record: BackupRecord) {
-        val id = VaultDatabase.get(context).photoDao().findCompleteByHash(record.hash)?.id ?: return
+    private suspend fun applyState(
+        context: Context,
+        repository: VaultRepository,
+        record: BackupRecord,
+    ) {
+        val id =
+            VaultDatabase
+                .get(context)
+                .photoDao()
+                .findCompleteByHash(record.hash)
+                ?.id ?: return
         if (record.favorite) repository.setFavorite(listOf(id), true)
         if (record.hidden) repository.setHidden(listOf(id), true)
         if (record.caption.isNotEmpty()) repository.setCaption(id, record.caption)
@@ -131,6 +160,12 @@ object VaultBackup {
         record.albums.forEach { title -> repository.addToAlbum(albumIdFor(repository, title), listOf(id)) }
     }
 
-    private suspend fun albumIdFor(repository: VaultRepository, title: String): Long =
-        repository.albums.first().firstOrNull { it.name == title }?.id ?: repository.createAlbum(title)
+    private suspend fun albumIdFor(
+        repository: VaultRepository,
+        title: String,
+    ): Long =
+        repository.albums
+            .first()
+            .firstOrNull { it.name == title }
+            ?.id ?: repository.createAlbum(title)
 }

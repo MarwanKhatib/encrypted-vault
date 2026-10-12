@@ -85,7 +85,10 @@ class ImageEditsTest {
         assertEquals("Photo (edited).jpg", ImageEdits.editedName(""))
     }
 
-    private fun assertFrame(expected: CropBox, actual: CropBox) {
+    private fun assertFrame(
+        expected: CropBox,
+        actual: CropBox,
+    ) {
         assertEquals(expected.left.toDouble(), actual.left.toDouble(), 1e-5)
         assertEquals(expected.top.toDouble(), actual.top.toDouble(), 1e-5)
         assertEquals(expected.right.toDouble(), actual.right.toDouble(), 1e-5)

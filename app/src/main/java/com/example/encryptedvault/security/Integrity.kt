@@ -17,7 +17,6 @@ import android.os.Debug
  * protects the key material even on a rooted device.
  */
 object Integrity {
-
     /** Why the app refuses to run. */
     enum class Violation { DEBUGGABLE_RELEASE, DEBUGGER_ATTACHED }
 
@@ -25,17 +24,26 @@ object Integrity {
      * Pure decision so it can be unit-tested: a hardened build must not be debuggable and must not have a debugger attached.
      * Development (non-hardened) builds are never refused.
      */
-    fun evaluate(hardenedBuild: Boolean, debuggable: Boolean, debuggerAttached: Boolean): Violation? = when {
-        !hardenedBuild -> null
-        debuggable -> Violation.DEBUGGABLE_RELEASE
-        debuggerAttached -> Violation.DEBUGGER_ATTACHED
-        else -> null
-    }
+    fun evaluate(
+        hardenedBuild: Boolean,
+        debuggable: Boolean,
+        debuggerAttached: Boolean,
+    ): Violation? =
+        when {
+            !hardenedBuild -> null
+            debuggable -> Violation.DEBUGGABLE_RELEASE
+            debuggerAttached -> Violation.DEBUGGER_ATTACHED
+            else -> null
+        }
 
     /** Reads the live state of this process and applies [evaluate]. */
-    fun check(context: Context, hardenedBuild: Boolean): Violation? = evaluate(
-        hardenedBuild = hardenedBuild,
-        debuggable = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0,
-        debuggerAttached = Debug.isDebuggerConnected() || Debug.waitingForDebugger(),
-    )
+    fun check(
+        context: Context,
+        hardenedBuild: Boolean,
+    ): Violation? =
+        evaluate(
+            hardenedBuild = hardenedBuild,
+            debuggable = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0,
+            debuggerAttached = Debug.isDebuggerConnected() || Debug.waitingForDebugger(),
+        )
 }

@@ -17,9 +17,20 @@ class BackupRecordsTest {
         folder: String? = "DCIM/Camera",
         albums: List<String> = listOf("Trips", "Ünïcödé"),
     ) = BackupRecord(
-        hash = "ab".repeat(32), mimeType = "image/jpeg", takenAt = 1_700_000_000_000, sizeBytes = 2_048, durationMs = 0,
-        width = 4032, height = 3024, favorite = true, hidden = false, trashed = true,
-        name = name, folder = folder, caption = "Sunset, ünïcode", albums = albums,
+        hash = "ab".repeat(32),
+        mimeType = "image/jpeg",
+        takenAt = 1_700_000_000_000,
+        sizeBytes = 2_048,
+        durationMs = 0,
+        width = 4032,
+        height = 3024,
+        favorite = true,
+        hidden = false,
+        trashed = true,
+        name = name,
+        folder = folder,
+        caption = "Sunset, ünïcode",
+        albums = albums,
     )
 
     private fun encode(vararg records: BackupRecord): ByteArray {
@@ -86,7 +97,10 @@ class BackupRecordsTest {
     @Test fun contentBytesAreNotTouchedByTheRecordCodec() {
         val content = byteArrayOf(1, 2, 3, 4)
         val stream = ByteArrayOutputStream()
-        DataOutputStream(stream).use { BackupRecords.write(it, record(albums = emptyList())); it.write(content) }
+        DataOutputStream(stream).use {
+            BackupRecords.write(it, record(albums = emptyList()))
+            it.write(content)
+        }
         val input = DataInputStream(ByteArrayInputStream(stream.toByteArray()))
         BackupRecords.read(input)
         val out = ByteArrayOutputStream()

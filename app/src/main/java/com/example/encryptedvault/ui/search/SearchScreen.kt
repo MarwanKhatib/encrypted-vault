@@ -48,7 +48,10 @@ fun SearchScreen(
     Column(modifier.fillMaxSize()) {
         Text("Search", Modifier.padding(start = 20.dp, top = 12.dp), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         OutlinedTextField(
-            query, { query = it }, singleLine = true, placeholder = { Text("Names, folders, dates, videos…") },
+            query,
+            { query = it },
+            singleLine = true,
+            placeholder = { Text("Names, folders, dates, videos…") },
             leadingIcon = { Icon(Icons.Filled.Search, null) },
             trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Filled.Close, "Clear") } },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -57,10 +60,21 @@ fun SearchScreen(
             query.isBlank() -> Suggestions(live) { query = it }
             results.isEmpty() -> EmptyState(Icons.Filled.Search, "No results", "Nothing matches “$query”.")
             else -> {
-                Text(Formatters.itemCount(results.size), Modifier.padding(horizontal = 20.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    Formatters.itemCount(results.size),
+                    Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 MediaGrid(
-                    results, settings.columns, emptySet(), selectionMode = false,
-                    onClick = { item -> val ids = results.map { it.id }; onOpenViewer(ids, ids.indexOf(item.id)) },
+                    results,
+                    settings.columns,
+                    emptySet(),
+                    selectionMode = false,
+                    onClick = { item ->
+                        val ids = results.map { it.id }
+                        onOpenViewer(ids, ids.indexOf(item.id))
+                    },
                     onLongClick = {},
                 )
             }
@@ -70,8 +84,16 @@ fun SearchScreen(
 
 /** Chips shown while the box is empty: categories, folders and years that exist in the library. */
 @Composable
-private fun Suggestions(items: List<VaultItem>, onPick: (String) -> Unit) {
-    val years = items.map { Instant.ofEpochMilli(it.takenAt).atZone(ZoneId.systemDefault()).year }.distinct().sortedDescending().map { it.toString() }
+private fun Suggestions(
+    items: List<VaultItem>,
+    onPick: (String) -> Unit,
+) {
+    val years =
+        items
+            .map { Instant.ofEpochMilli(it.takenAt).atZone(ZoneId.systemDefault()).year }
+            .distinct()
+            .sortedDescending()
+            .map { it.toString() }
     val folders = items.mapNotNull { it.sourceFolderLabel }.distinct().sorted()
     Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SuggestionRow("Categories", listOf("video", "photo", "screenshot", "favorite", "edited"), onPick)
@@ -82,7 +104,11 @@ private fun Suggestions(items: List<VaultItem>, onPick: (String) -> Unit) {
 
 /** A titled, horizontally scrolling row of chips; tapping one fills the query. */
 @Composable
-private fun SuggestionRow(title: String, values: List<String>, onPick: (String) -> Unit) {
+private fun SuggestionRow(
+    title: String,
+    values: List<String>,
+    onPick: (String) -> Unit,
+) {
     Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         values.forEach { AssistChip(onClick = { onPick(it) }, label = { Text(it) }) }

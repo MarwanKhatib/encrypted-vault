@@ -1,11 +1,13 @@
 package com.example.encryptedvault.crypto
 
 import android.content.Context
+import android.os.SystemClock
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.security.keystore.StrongBoxUnavailableException
 import android.util.Base64
+import java.io.File
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -33,7 +35,9 @@ import javax.crypto.spec.SecretKeySpec
  *
  * A second, independent PIN (the duress PIN) is stored only as a salted PBKDF2 verifier; see [isDuressPin].
  */
-class KeyHierarchy(context: Context) {
+class KeyHierarchy(
+    context: Context,
+) {
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     /** True once [setUp] has finished (the PIN wrapper exists). */
@@ -45,7 +49,10 @@ class KeyHierarchy(context: Context) {
      * First run: creates a new master key, wraps it under [pin] and returns the recovery words to show ONCE.
      * The phrase itself is never persisted.
      */
-    fun setUp(pin: CharArray, bip39: Bip39): List<String> {
+    fun setUp(
+        pin: CharArray,
+        bip39: Bip39,
+    ): List<String> {
         val entropy = bip39.newEntropy()
         wrapAll(deriveMaster(entropy), pin)
         return bip39.encode(entropy)
@@ -55,19 +62,24 @@ class KeyHierarchy(context: Context) {
      * Unlocks with [pin]. Returns the master key, or null when the PIN is wrong (or the wrapper cannot be read).
      * Upgrades a format-v1 vault to v2 after a successful unlock.
      */
-    fun unlockWithPin(pin: CharArray): SecretKey? = runCatching {
-        val version = prefs.getInt(KEY_WRAP_VERSION, 1)
-        val salt = b64(prefs.getString(KEY_SALT, null)!!)
-        val iterations = prefs.getInt(KEY_ITERATIONS, PinVerifier.LEGACY_ITERATIONS)
-        val stored = b64(prefs.getString(KEY_WRAPPED_PIN, null)!!)
-        val inner = if (version >= 2) gcmDecrypt(keystoreKey(), stored) else stored
-        val master = SecretKeySpec(gcmDecrypt(SecretKeySpec(PinVerifier.derive(pin, salt, iterations), "AES"), inner), "AES")
-        if (version < 2 || iterations < PinVerifier.CURRENT_ITERATIONS) wrapAll(master, pin)
-        master
-    }.getOrNull()
+    fun unlockWithPin(pin: CharArray): SecretKey? =
+        runCatching {
+            val version = prefs.getInt(KEY_WRAP_VERSION, 1)
+            val salt = b64(prefs.getString(KEY_SALT, null)!!)
+            val iterations = prefs.getInt(KEY_ITERATIONS, PinVerifier.LEGACY_ITERATIONS)
+            val stored = b64(prefs.getString(KEY_WRAPPED_PIN, null)!!)
+            val inner = if (version >= 2) gcmDecrypt(keystoreKey(), stored) else stored
+            val master = SecretKeySpec(gcmDecrypt(SecretKeySpec(PinVerifier.derive(pin, salt, iterations), "AES"), inner), "AES")
+            if (version < 2 || iterations < PinVerifier.CURRENT_ITERATIONS) wrapAll(master, pin)
+            master
+        }.getOrNull()
 
     /** Lockout recovery: re-derives the master key from [phrase] and wraps it under [newPin]. Null when the phrase is invalid. */
-    fun recover(phrase: List<String>, newPin: CharArray, bip39: Bip39): SecretKey? {
+    fun recover(
+        phrase: List<String>,
+        newPin: CharArray,
+        bip39: Bip39,
+    ): SecretKey? {
         val entropy = bip39.decode(phrase) ?: return null
         val master = deriveMaster(entropy)
         wrapAll(master, newPin)
@@ -78,7 +90,10 @@ class KeyHierarchy(context: Context) {
      * Verifies [old] and re-wraps the same master key under [new]. The biometric wrapper is unaffected.
      * Refuses a [new] PIN equal to the duress PIN, so a normal unlock can never be mistaken for a wipe.
      */
-    fun changePin(old: CharArray, new: CharArray): Boolean {
+    fun changePin(
+        old: CharArray,
+        new: CharArray,
+    ): Boolean {
         if (hasDuressPin() && (new.size != pinLength() || isDuressPin(new))) return false // the duress PIN must keep the same length
         val master = unlockWithPin(old) ?: return false
         wrapAll(master, new)
@@ -97,13 +112,19 @@ class KeyHierarchy(context: Context) {
      * Configures the duress PIN. [realPin] must unlock the vault; [duress] must satisfy [PinPolicy.duressProblem].
      * @return null on success, otherwise a message for the user.
      */
-    fun setDuressPin(realPin: CharArray, duress: CharArray): String? {
+    fun setDuressPin(
+        realPin: CharArray,
+        duress: CharArray,
+    ): String? {
         if (unlockWithPin(realPin) == null) return "Your current PIN is wrong"
         PinPolicy.duressProblem(String(realPin), String(duress))?.let { return it }
         val salt = PinVerifier.newSalt()
         val hash = PinVerifier.derive(duress, salt, PinVerifier.CURRENT_ITERATIONS)
-        prefs.edit()
-            .putString(KEY_DURESS_SALT, b64(salt)).putString(KEY_DURESS_HASH, b64(hash)).putInt(KEY_DURESS_ITERATIONS, PinVerifier.CURRENT_ITERATIONS)
+        prefs
+            .edit()
+            .putString(KEY_DURESS_SALT, b64(salt))
+            .putString(KEY_DURESS_HASH, b64(hash))
+            .putInt(KEY_DURESS_ITERATIONS, PinVerifier.CURRENT_ITERATIONS)
             .commit()
         return null
     }
@@ -111,7 +132,12 @@ class KeyHierarchy(context: Context) {
     /** Removes the duress PIN. Requires the real PIN so a bystander cannot disarm it. */
     fun clearDuressPin(realPin: CharArray): Boolean {
         if (unlockWithPin(realPin) == null) return false
-        prefs.edit().remove(KEY_DURESS_SALT).remove(KEY_DURESS_HASH).remove(KEY_DURESS_ITERATIONS).commit()
+        prefs
+            .edit()
+            .remove(KEY_DURESS_SALT)
+            .remove(KEY_DURESS_HASH)
+            .remove(KEY_DURESS_ITERATIONS)
+            .commit()
         return true
     }
 
@@ -127,7 +153,12 @@ class KeyHierarchy(context: Context) {
      * disk is permanently unreadable, even before the files themselves are deleted.
      */
     fun destroyAllKeyMaterial() {
-        runCatching { KeyStore.getInstance(KEYSTORE).apply { load(null) }.apply { deleteEntry(KS_ALIAS); deleteEntry(BIO_ALIAS) } }
+        runCatching {
+            KeyStore.getInstance(KEYSTORE).apply { load(null) }.apply {
+                deleteEntry(KS_ALIAS)
+                deleteEntry(BIO_ALIAS)
+            }
+        }
         prefs.edit().clear().commit()
     }
 
@@ -145,7 +176,10 @@ class KeyHierarchy(context: Context) {
     }
 
     /** Stores the master key encrypted by the biometric-authenticated [authedCipher]. */
-    fun completeEnableBiometric(authedCipher: Cipher, master: SecretKey) {
+    fun completeEnableBiometric(
+        authedCipher: Cipher,
+        master: SecretKey,
+    ) {
         val ct = authedCipher.doFinal(master.encoded)
         prefs.edit().putString(KEY_WRAPPED_BIO, b64(authedCipher.iv + ct)).commit()
     }
@@ -156,17 +190,19 @@ class KeyHierarchy(context: Context) {
         return try {
             Cipher.getInstance(GCM).apply { init(Cipher.DECRYPT_MODE, bioKey(), GCMParameterSpec(128, blob, 0, 12)) }
         } catch (e: KeyPermanentlyInvalidatedException) {
-            disableBiometric(); null
+            disableBiometric()
+            null
         } catch (e: Exception) {
             null
         }
     }
 
     /** Finishes a biometric unlock: decrypts the master key with the authenticated [authedCipher]. */
-    fun unlockWithBiometric(authedCipher: Cipher): SecretKey? = runCatching {
-        val blob = b64(prefs.getString(KEY_WRAPPED_BIO, null)!!)
-        SecretKeySpec(authedCipher.doFinal(blob, 12, blob.size - 12), "AES")
-    }.getOrNull()
+    fun unlockWithBiometric(authedCipher: Cipher): SecretKey? =
+        runCatching {
+            val blob = b64(prefs.getString(KEY_WRAPPED_BIO, null)!!)
+            SecretKeySpec(authedCipher.doFinal(blob, 12, blob.size - 12), "AES")
+        }.getOrNull()
 
     /** Turns biometric unlock off and deletes its Keystore key. */
     fun disableBiometric() {
@@ -181,14 +217,21 @@ class KeyHierarchy(context: Context) {
     private fun bioKey(): SecretKey = keystoreAesKey(BIO_ALIAS, authRequired = true)
 
     // ---- Persistent PIN lockout ---------------------------------------------------------------
-    // Survives app restarts. It uses the wall clock, so a clock change can shorten the delay; the real brake is the KDF cost
-    // plus the Keystore layer, which forces every guess to run on this device.
+    // Survives app restarts. It is timed on the monotonic clock (SystemClock.elapsedRealtime), so changing the wall clock cannot
+    // shorten it. A reboot restarts the monotonic clock, so a lockout that spans a reboot is enforced in full again. The KDF cost
+    // and the Keystore layer still make every guess run on this device.
 
     /** Wrong PIN attempts since the last success. */
     fun failCount() = prefs.getInt(KEY_FAILS, 0)
 
     /** Milliseconds until the next attempt is allowed (0 when not locked out). */
-    fun lockedForMs(): Long = (prefs.getLong(KEY_LOCK_UNTIL, 0) - System.currentTimeMillis()).coerceAtLeast(0)
+    fun lockedForMs(): Long =
+        remainingLockMs(
+            lockMs = prefs.getLong(KEY_LOCK_MS, 0),
+            startedAtElapsed = prefs.getLong(KEY_LOCK_STARTED, 0),
+            nowElapsed = SystemClock.elapsedRealtime(),
+            sameBoot = prefs.getString(KEY_LOCK_BOOT, null) == currentBootId(),
+        )
 
     /** Counts a wrong PIN and, after [FREE_TRIES], starts an exponentially growing delay (30 s doubling, capped at 15 min). */
     fun recordFailure() {
@@ -196,21 +239,35 @@ class KeyHierarchy(context: Context) {
         val e = prefs.edit().putInt(KEY_FAILS, n)
         if (n >= FREE_TRIES) {
             val secs = minOf(900L, 30L shl (n - FREE_TRIES).coerceAtMost(5))
-            e.putLong(KEY_LOCK_UNTIL, System.currentTimeMillis() + secs * 1000)
+            e
+                .putLong(KEY_LOCK_MS, secs * 1000)
+                .putLong(KEY_LOCK_STARTED, SystemClock.elapsedRealtime())
+                .putString(KEY_LOCK_BOOT, currentBootId())
         }
         e.commit()
     }
 
     /** Clears the failure counter and any lockout (called after a successful unlock). */
-    fun resetFailures() = prefs.edit().remove(KEY_FAILS).remove(KEY_LOCK_UNTIL).commit()
+    fun resetFailures() =
+        prefs
+            .edit()
+            .remove(KEY_FAILS)
+            .remove(KEY_LOCK_MS)
+            .remove(KEY_LOCK_STARTED)
+            .remove(KEY_LOCK_BOOT)
+            .commit()
 
     // ---- Internals ----------------------------------------------------------------------------
 
     /** Writes the v2 PIN wrapper for [master] with a fresh salt and the current iteration count, and drops the obsolete unauthenticated wrapper. */
-    private fun wrapAll(master: SecretKey, pin: CharArray) {
+    private fun wrapAll(
+        master: SecretKey,
+        pin: CharArray,
+    ) {
         val salt = PinVerifier.newSalt()
         val inner = gcmEncrypt(SecretKeySpec(PinVerifier.derive(pin, salt, PinVerifier.CURRENT_ITERATIONS), "AES"), master.encoded)
-        prefs.edit()
+        prefs
+            .edit()
             .putString(KEY_SALT, b64(salt))
             .putString(KEY_WRAPPED_PIN, b64(gcmEncrypt(keystoreKey(), inner)))
             .putInt(KEY_ITERATIONS, PinVerifier.CURRENT_ITERATIONS)
@@ -233,21 +290,31 @@ class KeyHierarchy(context: Context) {
     private fun keystoreKey(): SecretKey = keystoreAesKey(KS_ALIAS, authRequired = false)
 
     /** Returns the AES-256-GCM key stored under [alias], generating it (StrongBox first, graceful TEE fallback) when missing. */
-    private fun keystoreAesKey(alias: String, authRequired: Boolean): SecretKey {
+    private fun keystoreAesKey(
+        alias: String,
+        authRequired: Boolean,
+    ): SecretKey {
         val ks = KeyStore.getInstance(KEYSTORE).apply { load(null) }
         (ks.getKey(alias, null) as? SecretKey)?.let { return it }
+
         /** Creates the key in StrongBox when [strongBox] is true, otherwise in the TEE. */
         fun generate(strongBox: Boolean): SecretKey {
-            val spec = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
-                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                .setKeySize(256)
-                .setIsStrongBoxBacked(strongBox)
-                .apply { if (authRequired) setUserAuthenticationRequired(true).setInvalidatedByBiometricEnrollment(true) }
-                .build()
+            val spec =
+                KeyGenParameterSpec
+                    .Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                    .setKeySize(256)
+                    .setIsStrongBoxBacked(strongBox)
+                    .apply { if (authRequired) setUserAuthenticationRequired(true).setInvalidatedByBiometricEnrollment(true) }
+                    .build()
             return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE).apply { init(spec) }.generateKey()
         }
-        return try { generate(true) } catch (e: StrongBoxUnavailableException) { generate(false) }
+        return try {
+            generate(true)
+        } catch (e: StrongBoxUnavailableException) {
+            generate(false)
+        }
     }
 
     companion object {
@@ -264,7 +331,27 @@ class KeyHierarchy(context: Context) {
         private const val KEY_DURESS_ITERATIONS = "duress_iter"
         private const val KEY_WRAPPED_BIO = "wrapped_bio"
         private const val KEY_FAILS = "fails"
-        private const val KEY_LOCK_UNTIL = "lock_until"
+        private const val KEY_LOCK_MS = "lock_ms"
+        private const val KEY_LOCK_STARTED = "lock_started"
+        private const val KEY_LOCK_BOOT = "lock_boot"
+
+        /**
+         * Time left in a lockout of [lockMs] that started at [startedAtElapsed] (monotonic). Only time measured within the same boot
+         * counts down; a different boot, or a clock that appears to go backwards, keeps the full lockout.
+         */
+        internal fun remainingLockMs(
+            lockMs: Long,
+            startedAtElapsed: Long,
+            nowElapsed: Long,
+            sameBoot: Boolean,
+        ): Long {
+            if (lockMs <= 0) return 0
+            val passed = if (sameBoot) (nowElapsed - startedAtElapsed).coerceAtLeast(0) else 0L
+            return (lockMs - passed).coerceAtLeast(0)
+        }
+
+        /** Kernel boot ID: changes on every reboot. Unknown when the file cannot be read, which then counts as the same boot. */
+        internal fun currentBootId(): String = runCatching { File("/proc/sys/kernel/random/boot_id").readText().trim() }.getOrDefault("unknown")
 
         /** Pre-v2 vaults also stored the master key under an unauthenticated Keystore key; nothing reads it and it is removed on upgrade. */
         private const val KEY_WRAPPED_KS_OBSOLETE = "wrapped_ks"
@@ -276,17 +363,24 @@ class KeyHierarchy(context: Context) {
 
         /** Base64 without line wraps, for storing bytes in preferences. */
         private fun b64(b: ByteArray) = Base64.encodeToString(b, Base64.NO_WRAP)
+
         /** Inverse of the byte-array overload. */
         private fun b64(s: String) = Base64.decode(s, Base64.NO_WRAP)
 
         /** AES-256-GCM encrypt; output layout is `iv(12) || ciphertext || tag(16)`. */
-        fun gcmEncrypt(key: SecretKey, plain: ByteArray): ByteArray {
+        fun gcmEncrypt(
+            key: SecretKey,
+            plain: ByteArray,
+        ): ByteArray {
             val c = Cipher.getInstance(GCM).apply { init(Cipher.ENCRYPT_MODE, key) }
             return c.iv + c.doFinal(plain)
         }
 
         /** Inverse of [gcmEncrypt]; throws when the tag does not verify (wrong key or tampered data). */
-        fun gcmDecrypt(key: SecretKey, blob: ByteArray): ByteArray {
+        fun gcmDecrypt(
+            key: SecretKey,
+            blob: ByteArray,
+        ): ByteArray {
             val c = Cipher.getInstance(GCM)
             c.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, blob, 0, 12))
             return c.doFinal(blob, 12, blob.size - 12)

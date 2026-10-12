@@ -25,17 +25,24 @@ import javax.crypto.SecretKey
  * The recovery phrase of the new vault is intentionally discarded: whoever forced the duress PIN must not be handed a usable phrase.
  */
 object PanicWipe {
-
     /**
      * Wipes everything and returns the session key of the new empty vault.
      * Blocking and CPU heavy (two PBKDF2 runs): call from a background dispatcher.
      */
-    fun execute(context: Context, keys: KeyHierarchy, newPin: CharArray, bip39: Bip39): SecretKey {
+    fun execute(
+        context: Context,
+        keys: KeyHierarchy,
+        newPin: CharArray,
+        bip39: Bip39,
+    ): SecretKey {
         val app = context.applicationContext
         SessionManager.forceLock()
         keys.destroyAllKeyMaterial()
 
-        WorkManager.getInstance(app).apply { cancelAllWork(); pruneWork() }
+        WorkManager.getInstance(app).apply {
+            cancelAllWork()
+            pruneWork()
+        }
         VaultRepository.reset()
         VaultDatabase.destroy(app)
         deleteContents(VaultStorage.directory(app))
@@ -49,6 +56,5 @@ object PanicWipe {
      * Deletes everything inside [dir] (files and sub-directories) but keeps [dir] itself.
      * @return the number of entries that could not be deleted, 0 on full success.
      */
-    internal fun deleteContents(dir: File): Int =
-        dir.listFiles().orEmpty().count { !it.deleteRecursively() }
+    internal fun deleteContents(dir: File): Int = dir.listFiles().orEmpty().count { !it.deleteRecursively() }
 }

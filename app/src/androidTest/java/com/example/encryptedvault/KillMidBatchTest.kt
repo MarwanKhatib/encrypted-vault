@@ -13,9 +13,9 @@ import com.example.encryptedvault.media.MediaTransfer
 import com.example.encryptedvault.media.SourceInfo
 import com.example.encryptedvault.work.ImportWorker
 import kotlinx.coroutines.runBlocking
-import org.junit.Assume.assumeTrue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.fail
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -43,7 +43,15 @@ class KillMidBatchTest {
         keys.destroyAllKeyMaterial()
         VaultDatabase.destroy(context)
         VaultStorage.directory(context).listFiles()?.forEach { it.delete() }
-        val bip39 = Bip39(context.assets.open("bip39_english.txt").bufferedReader().readLines().map { it.trim() }.filter { it.isNotEmpty() })
+        val bip39 =
+            Bip39(
+                context.assets
+                    .open("bip39_english.txt")
+                    .bufferedReader()
+                    .readLines()
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() },
+            )
         keys.setUp(pin, bip39)
         VaultApp.sessionKey = checkNotNull(keys.unlockWithPin(pin))
 
@@ -67,22 +75,48 @@ class KillMidBatchTest {
         val deadline = System.currentTimeMillis() + RESUME_TIMEOUT_MS
         while (completeCount() < COUNT && System.currentTimeMillis() < deadline) Thread.sleep(2_000)
 
-        val hashes = runBlocking { VaultDatabase.get(context).photoDao().allCompleted().map { it.hash } }
+        val hashes =
+            runBlocking {
+                VaultDatabase
+                    .get(context)
+                    .photoDao()
+                    .allCompleted()
+                    .map { it.hash }
+            }
         assertEquals("no photo lost", COUNT, hashes.size)
         assertEquals("no duplicate entries", COUNT, hashes.toSet().size)
         assertEquals("no half-written rows", 0, pendingCount())
-        val orphans = VaultStorage.directory(context).listFiles().orEmpty().filter { it.name.endsWith(".tmp") }
+        val orphans =
+            VaultStorage
+                .directory(context)
+                .listFiles()
+                .orEmpty()
+                .filter { it.name.endsWith(".tmp") }
         assertEquals("no .tmp files left in the vault", 0, orphans.size)
         val leftovers = File(context.cacheDir, MediaTransfer.IMPORT_DIR).listFiles().orEmpty()
         assertEquals("no plaintext left in the import cache", 0, leftovers.size)
         Log.i(TAG, "drill passed: $COUNT photos, one entry each")
     }
 
-    private fun completeCount(): Int = runBlocking { VaultDatabase.get(context).photoDao().allCompleted().size }
+    private fun completeCount(): Int =
+        runBlocking {
+            VaultDatabase
+                .get(context)
+                .photoDao()
+                .allCompleted()
+                .size
+        }
 
     /** Rows that never reached `complete`. The DAO only lists complete rows, so this counts them directly. */
-    private fun pendingCount(): Int = VaultDatabase.get(context).openHelper.readableDatabase
-        .query("SELECT COUNT(*) FROM photos WHERE status != 'complete'").use { it.moveToFirst(); it.getInt(0) }
+    private fun pendingCount(): Int =
+        VaultDatabase
+            .get(context)
+            .openHelper.readableDatabase
+            .query("SELECT COUNT(*) FROM photos WHERE status != 'complete'")
+            .use {
+                it.moveToFirst()
+                it.getInt(0)
+            }
 
     /** A large, distinct JPEG staged in the import cache, the way the picker hands files to the import. */
     private fun stagePhoto(index: Int): MediaTransfer.StagedFile {

@@ -37,27 +37,43 @@ data class VaultItem(
 
     /** Screen recording: a video from a screen-recording folder or with a recorder-style name. */
     val isScreenRecording: Boolean
-        get() = isVideo && (sourceFolder?.contains("screenrecord", true) == true || sourceFolder?.contains("recordings", true) == true ||
-            name.contains("screenrecord", true) || name.contains("screen_record", true) || name.contains("screen-record", true))
+        get() =
+            isVideo &&
+                (
+                    sourceFolder?.contains("screenrecord", true) == true ||
+                        sourceFolder?.contains("recordings", true) == true ||
+                        name.contains("screenrecord", true) ||
+                        name.contains("screen_record", true) ||
+                        name.contains("screen-record", true)
+                )
+
     /** A copy saved by the photo editor (see `ImageEdits.editedName`). */
     val isEdited: Boolean get() = name.contains("(edited)")
     val isScreenshot: Boolean
-        get() = sourceFolder?.contains("screenshot", ignoreCase = true) == true ||
-            name.contains("screenshot", ignoreCase = true)
+        get() =
+            sourceFolder?.contains("screenshot", ignoreCase = true) == true ||
+                name.contains("screenshot", ignoreCase = true)
 
     /** Short folder label such as `Camera` for `DCIM/Camera`. */
     val sourceFolderLabel: String? get() = sourceFolder?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
 
     /** File name to show and to restore with. Falls back to a stable id-based name. */
     val displayName: String
-        get() = name.ifBlank { "${hash.take(8)}.${fileExtension}" }
+        get() = name.ifBlank { "${hash.take(8)}.$fileExtension" }
 
     val fileExtension: String
-        get() = android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
-            ?: mimeType.substringAfter('/', "bin").lowercase(Locale.ROOT)
+        get() =
+            android.webkit.MimeTypeMap
+                .getSingleton()
+                .getExtensionFromMimeType(mimeType)
+                ?: mimeType.substringAfter('/', "bin").lowercase(Locale.ROOT)
 }
 
 private const val PANORAMA_ASPECT = 2f
 
 /** A user-created album and the ids of the items it contains. */
-data class Album(val id: Long, val name: String, val itemIds: Set<Long>)
+data class Album(
+    val id: Long,
+    val name: String,
+    val itemIds: Set<Long>,
+)

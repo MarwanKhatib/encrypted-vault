@@ -45,7 +45,15 @@ class TrimAndBackupFlowTest {
         keys = KeyHierarchy(context)
         keys.destroyAllKeyMaterial()
         wipeVault()
-        val bip39 = Bip39(context.assets.open("bip39_english.txt").bufferedReader().readLines().map { it.trim() }.filter { it.isNotEmpty() })
+        val bip39 =
+            Bip39(
+                context.assets
+                    .open("bip39_english.txt")
+                    .bufferedReader()
+                    .readLines()
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() },
+            )
         keys.setUp(pin, bip39)
         VaultApp.sessionKey = checkNotNull(keys.unlockWithPin(pin))
     }
@@ -64,7 +72,10 @@ class TrimAndBackupFlowTest {
     }
 
     /** Copies [source] into the import folder under [name], the way the picker stages files. */
-    private fun stage(source: File, name: String): MediaTransfer.StagedFile {
+    private fun stage(
+        source: File,
+        name: String,
+    ): MediaTransfer.StagedFile {
         val dir = File(context.cacheDir, MediaTransfer.IMPORT_DIR).apply { mkdirs() }
         val copy = File(dir, "${System.nanoTime()}.${source.extension}").also { source.copyTo(it) }
         return MediaTransfer.StagedFile(copy.path, SourceInfo(name, "DCIM/Camera", System.currentTimeMillis()))
@@ -89,9 +100,12 @@ class TrimAndBackupFlowTest {
     }
 
     @Test fun backupRestoresFavoritesCaptionsAndAlbumsOnAFreshVault() {
-        val photo = File(context.cacheDir, "beach.jpg").apply {
-            outputStream().use { Bitmap.createBitmap(320, 240, Bitmap.Config.ARGB_8888).apply { eraseColor(0xFF3366CC.toInt()) }.compress(Bitmap.CompressFormat.JPEG, 90, it) }
-        }
+        val photo =
+            File(context.cacheDir, "beach.jpg").apply {
+                outputStream().use {
+                    Bitmap.createBitmap(320, 240, Bitmap.Config.ARGB_8888).apply { eraseColor(0xFF3366CC.toInt()) }.compress(Bitmap.CompressFormat.JPEG, 90, it)
+                }
+            }
         assertTrue("import the photo", runBlocking { ImportWorker.importAndWait(context, stage(photo, "beach.jpg")) })
         val repository = VaultRepository.get(context)
         val id = items().single().id
@@ -121,9 +135,10 @@ class TrimAndBackupFlowTest {
     }
 
     @Test fun wrongPassphraseIsRefusedAndTheVaultStaysEmpty() {
-        val photo = File(context.cacheDir, "wrong.jpg").apply {
-            outputStream().use { Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888).compress(Bitmap.CompressFormat.JPEG, 90, it) }
-        }
+        val photo =
+            File(context.cacheDir, "wrong.jpg").apply {
+                outputStream().use { Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888).compress(Bitmap.CompressFormat.JPEG, 90, it) }
+            }
         assertTrue(runBlocking { ImportWorker.importAndWait(context, stage(photo, "wrong.jpg")) })
         val backup = File(context.cacheDir, "wrong-pass.evbk")
         runBlocking { backup.outputStream().use { VaultBackup.export(context, passphrase, it) } }

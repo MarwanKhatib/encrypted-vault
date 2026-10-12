@@ -7,7 +7,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ImportBatchesTest {
-    private fun staged(index: Int, pathLength: Int = 60, nameLength: Int = 20, folderLength: Int = 12) = MediaTransfer.StagedFile(
+    private fun staged(
+        index: Int,
+        pathLength: Int = 60,
+        nameLength: Int = 20,
+        folderLength: Int = 12,
+    ) = MediaTransfer.StagedFile(
         path = "/data/user/0/com.example.encryptedvault/cache/import/" + "p".repeat(pathLength) + "$index.jpg",
         info = SourceInfo("n".repeat(nameLength) + "$index.jpg", "f".repeat(folderLength), index.toLong()),
     )

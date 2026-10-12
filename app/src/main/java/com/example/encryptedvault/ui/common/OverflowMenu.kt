@@ -40,11 +40,12 @@ fun OverflowMenuItem(
     DropdownMenuItem(
         text = { Text(label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface) },
         leadingIcon = if (icon != null) ({ Icon(icon, null, tint = tint) }) else null,
-        trailingIcon = when {
-            selected -> ({ Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) })
-            trailing != null -> ({ Text(trailing, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) })
-            else -> null
-        },
+        trailingIcon =
+            when {
+                selected -> ({ Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) })
+                trailing != null -> ({ Text(trailing, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) })
+                else -> null
+            },
         onClick = onClick,
         contentPadding = PaddingValues(horizontal = 16.dp),
     )

@@ -22,22 +22,36 @@ class CollectionsTest {
     private fun ids(source: CollectionSource) = Collections.items(source, all, albums).map { it.id }
 
     @Test fun videosExcludeTrash() = assertEquals(listOf(2L, 10L), ids(CollectionSource.Videos))
+
     @Test fun hiddenShowsOnlyHiddenItems() = assertEquals(listOf(7L), ids(CollectionSource.Hidden))
+
     @Test fun hiddenItemsStayOutOfEveryOtherCollection() {
         assertEquals(false, 7L in ids(CollectionSource.Favorites))
         assertEquals(false, 7L in ids(CollectionSource.Recents))
     }
+
     @Test fun recentsIsTheWholeLibrary() = assertEquals(listOf(1L, 2L, 3L, 4L, 6L, 8L, 9L, 10L), ids(CollectionSource.Recents))
+
     @Test fun panoramasUseAspectRatio() = assertEquals(listOf(8L), ids(CollectionSource.Panoramas))
+
     @Test fun animatedMeansGif() = assertEquals(listOf(9L), ids(CollectionSource.Animated))
+
     @Test fun screenRecordingsAreVideosFromRecorderFolders() = assertEquals(listOf(10L), ids(CollectionSource.ScreenRecordings))
+
     @Test fun fixedCollectionKeepsOnlyLiveItemsWithThoseIds() = assertEquals(listOf(1L, 3L), ids(CollectionSource.Fixed("x", listOf(1, 3, 5, 7))))
+
     @Test fun favoritesExcludeTrashedAndHidden() = assertEquals(listOf(3L), ids(CollectionSource.Favorites))
+
     @Test fun screenshotsAreDetectedByFolder() = assertEquals(listOf(4L), ids(CollectionSource.Screenshots))
+
     @Test fun recentlyDeletedShowsOnlyTrashed() = assertEquals(listOf(5L), ids(CollectionSource.RecentlyDeleted))
+
     @Test fun folderCollectsItsItems() = assertEquals(listOf(1L, 2L, 8L, 9L), ids(CollectionSource.Folder("DCIM/Camera")))
+
     @Test fun userAlbumHidesTrashedMembers() = assertEquals(listOf(1L, 3L), ids(CollectionSource.UserAlbum(10)))
+
     @Test fun missingAlbumIsEmpty() = assertEquals(emptyList<Long>(), ids(CollectionSource.UserAlbum(99)))
+
     @Test fun recentlyEditedFindsEditorCopiesOnly() {
         val edited = testItem(11, name = "a (edited).jpg")
         assertEquals(listOf(11L), Collections.items(CollectionSource.RecentlyEdited, all + edited, albums).map { it.id })

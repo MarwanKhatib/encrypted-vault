@@ -47,18 +47,22 @@ object PhotoMetadataCodec {
      * Parses any supported layout.
      * @throws IllegalArgumentException when the version byte is unknown (a corrupted or newer payload).
      */
-    fun decode(data: ByteArray): PhotoMetadata = DataInputStream(ByteArrayInputStream(data)).use { input ->
-        val version = input.readUnsignedByte()
-        require(version in 1..VERSION) { "Unsupported metadata version $version" }
-        val name = input.readUTF()
-        val folder = if (input.readBoolean()) input.readUTF() else null
-        if (version <= 3) skipLegacyFaces(input, version)
-        val caption = if (version >= 2) input.readUTF() else ""
-        PhotoMetadata(name, folder, caption)
-    }
+    fun decode(data: ByteArray): PhotoMetadata =
+        DataInputStream(ByteArrayInputStream(data)).use { input ->
+            val version = input.readUnsignedByte()
+            require(version in 1..VERSION) { "Unsupported metadata version $version" }
+            val name = input.readUTF()
+            val folder = if (input.readBoolean()) input.readUTF() else null
+            if (version <= 3) skipLegacyFaces(input, version)
+            val caption = if (version >= 2) input.readUTF() else ""
+            PhotoMetadata(name, folder, caption)
+        }
 
     /** Consumes the face block that v1-v3 wrote between the folder and the caption. */
-    private fun skipLegacyFaces(input: DataInputStream, version: Int) {
+    private fun skipLegacyFaces(
+        input: DataInputStream,
+        version: Int,
+    ) {
         input.readBoolean() // facesScanned flag
         repeat(input.readUnsignedShort()) {
             repeat(4) { input.readFloat() } // left, top, right, bottom

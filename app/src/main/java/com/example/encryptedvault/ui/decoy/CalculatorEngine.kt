@@ -16,37 +16,53 @@ object CalculatorEngine {
     private val OPERATORS = setOf(PLUS, MINUS, TIMES, DIVIDE)
 
     /** Applies one key press to [expression] and returns the new expression. `=` is handled by the caller. */
-    fun press(expression: String, key: Char): String = when {
-        key.isDigit() -> appendDigit(expression, key)
-        key == '.' -> appendDecimalPoint(expression)
-        key in OPERATORS -> appendOperator(expression, key)
-        key == PERCENT -> if (expression.lastOrNull()?.isDigit() == true) expression + PERCENT else expression
-        key == '⌫' -> expression.dropLast(1)
-        key == 'C' -> ""
-        key == '±' -> toggleSign(expression)
-        else -> expression
-    }
+    fun press(
+        expression: String,
+        key: Char,
+    ): String =
+        when {
+            key.isDigit() -> appendDigit(expression, key)
+            key == '.' -> appendDecimalPoint(expression)
+            key in OPERATORS -> appendOperator(expression, key)
+            key == PERCENT -> if (expression.lastOrNull()?.isDigit() == true) expression + PERCENT else expression
+            key == '⌫' -> expression.dropLast(1)
+            key == 'C' -> ""
+            key == '±' -> toggleSign(expression)
+            else -> expression
+        }
 
     /** True if [expression] looks like a PIN entry: only digits, between [minLength] and [maxLength] of them. */
-    fun looksLikePin(expression: String, minLength: Int, maxLength: Int): Boolean =
-        expression.length in minLength..maxLength && expression.all { it.isDigit() }
+    fun looksLikePin(
+        expression: String,
+        minLength: Int,
+        maxLength: Int,
+    ): Boolean = expression.length in minLength..maxLength && expression.all { it.isDigit() }
 
     /** Evaluates [expression] with normal operator precedence; null if it is incomplete, invalid or divides by zero. */
     fun evaluate(expression: String): Double? {
         val tokens = tokenize(expression) ?: return null
         val output = ArrayDeque<Double>()
         val operators = ArrayDeque<Char>()
+
         /** Pops one operator and two operands and pushes the result. False on a malformed stack or a division by zero. */
         fun apply(): Boolean {
             val op = operators.removeLastOrNull() ?: return false
             val b = output.removeLastOrNull() ?: return false
             val a = output.removeLastOrNull() ?: return false
-            output.addLast(when (op) { PLUS -> a + b; MINUS -> a - b; TIMES -> a * b; else -> if (b == 0.0) return false else a / b })
+            output.addLast(
+                when (op) {
+                    PLUS -> a + b
+                    MINUS -> a - b
+                    TIMES -> a * b
+                    else -> if (b == 0.0) return false else a / b
+                },
+            )
             return true
         }
         for (token in tokens) {
-            if (token is Double) output.addLast(token)
-            else {
+            if (token is Double) {
+                output.addLast(token)
+            } else {
                 val op = token as Char
                 while (operators.isNotEmpty() && precedence(operators.last()) >= precedence(op)) if (!apply()) return null
                 operators.addLast(op)
@@ -57,16 +73,25 @@ object CalculatorEngine {
     }
 
     /** `7`, `0.5`, `1234567`, `3.3333333333`; no trailing zeros and no exponent for everyday values. */
-    fun format(value: Double): String = when {
-        value.isNaN() || value.isInfinite() -> "Error"
-        value == Math.rint(value) && abs(value) < 1e15 -> value.toLong().toString()
-        else -> String.format(Locale.US, "%.10f", value).trimEnd('0').trimEnd('.').ifEmpty { "0" }
-    }
+    fun format(value: Double): String =
+        when {
+            value.isNaN() || value.isInfinite() -> "Error"
+            value == Math.rint(value) && abs(value) < 1e15 -> value.toLong().toString()
+            else ->
+                String
+                    .format(Locale.US, "%.10f", value)
+                    .trimEnd('0')
+                    .trimEnd('.')
+                    .ifEmpty { "0" }
+        }
 
     // ---- input rules ------------------------------------------------------------------------
 
     /** Appends a digit, replacing a lone leading zero (`05` becomes `5`). */
-    private fun appendDigit(expression: String, digit: Char): String {
+    private fun appendDigit(
+        expression: String,
+        digit: Char,
+    ): String {
         val number = currentNumber(expression)
         // "0" followed by a digit replaces the zero ("05" -> "5").
         return if (number == "0") expression.dropLast(1) + digit else expression + digit
@@ -83,12 +108,16 @@ object CalculatorEngine {
     }
 
     /** Appends an operator or replaces the previous one. At the start only a minus is allowed (negative number). */
-    private fun appendOperator(expression: String, op: Char): String = when {
-        expression.isEmpty() -> if (op == MINUS) "$MINUS" else expression // only a leading minus makes sense
-        expression.last() in OPERATORS -> if (expression.length == 1) expression else expression.dropLast(1) + op
-        expression.last() == '.' -> expression
-        else -> expression + op
-    }
+    private fun appendOperator(
+        expression: String,
+        op: Char,
+    ): String =
+        when {
+            expression.isEmpty() -> if (op == MINUS) "$MINUS" else expression // only a leading minus makes sense
+            expression.last() in OPERATORS -> if (expression.length == 1) expression else expression.dropLast(1) + op
+            expression.last() == '.' -> expression
+            else -> expression + op
+        }
 
     /** Flips the sign of the number being typed (the last one). */
     private fun toggleSign(expression: String): String {
@@ -119,10 +148,18 @@ object CalculatorEngine {
             when {
                 c == MINUS && expectsNumber -> { // unary minus belongs to the number that follows
                     val (value, next) = readNumber(expression, i + 1) ?: return null
-                    tokens += -value; i = next
+                    tokens += -value
+                    i = next
                 }
-                c.isDigit() || c == '.' -> { val (value, next) = readNumber(expression, i) ?: return null; tokens += value; i = next }
-                c in OPERATORS && !expectsNumber -> { tokens += c; i++ }
+                c.isDigit() || c == '.' -> {
+                    val (value, next) = readNumber(expression, i) ?: return null
+                    tokens += value
+                    i = next
+                }
+                c in OPERATORS && !expectsNumber -> {
+                    tokens += c
+                    i++
+                }
                 else -> return null
             }
         }
@@ -130,11 +167,17 @@ object CalculatorEngine {
     }
 
     /** Reads `123.45` (optionally followed by `%`) starting at [start]; returns the value and the next index. */
-    private fun readNumber(expression: String, start: Int): Pair<Double, Int>? {
+    private fun readNumber(
+        expression: String,
+        start: Int,
+    ): Pair<Double, Int>? {
         var end = start
         while (end < expression.length && (expression[end].isDigit() || expression[end] == '.')) end++
         var value = expression.substring(start, end).toDoubleOrNull() ?: return null
-        while (end < expression.length && expression[end] == PERCENT) { value /= 100; end++ }
+        while (end < expression.length && expression[end] == PERCENT) {
+            value /= 100
+            end++
+        }
         return value to end
     }
 }

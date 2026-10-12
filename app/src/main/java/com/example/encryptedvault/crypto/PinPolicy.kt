@@ -24,17 +24,24 @@ object PinPolicy {
     }
 
     /** True when the user has typed exactly the stored length, i.e. the lock screen should submit. A length of 0 (unknown, legacy vault) never auto-submits. */
-    fun isComplete(entered: String, storedLength: Int): Boolean = storedLength > 0 && entered.length == storedLength
+    fun isComplete(
+        entered: String,
+        storedLength: Int,
+    ): Boolean = storedLength > 0 && entered.length == storedLength
 
     /**
      * Why [candidate] cannot be the duress PIN, or null when it is acceptable. A duress PIN must be a valid,
      * non-weak PIN, differ from the real PIN, and have the same length as it (otherwise the auto-submit would never fire for it).
      */
-    fun duressProblem(realPin: String, candidate: String): String? = when {
-        !isValid(candidate) -> "Use $MIN_LENGTH–$MAX_LENGTH digits"
-        isWeak(candidate) -> "That PIN is too easy to guess"
-        candidate == realPin -> "Must differ from your normal PIN"
-        candidate.length != realPin.length -> "Must have the same length as your normal PIN (${realPin.length} digits)"
-        else -> null
-    }
+    fun duressProblem(
+        realPin: String,
+        candidate: String,
+    ): String? =
+        when {
+            !isValid(candidate) -> "Use $MIN_LENGTH–$MAX_LENGTH digits"
+            isWeak(candidate) -> "That PIN is too easy to guess"
+            candidate == realPin -> "Must differ from your normal PIN"
+            candidate.length != realPin.length -> "Must have the same length as your normal PIN (${realPin.length} digits)"
+            else -> null
+        }
 }

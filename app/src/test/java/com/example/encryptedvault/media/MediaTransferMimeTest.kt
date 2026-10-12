@@ -6,8 +6,20 @@ import org.junit.Test
 
 class MediaTransferMimeTest {
     @Test fun photosAndVideosOfAnyFormatAreAccepted() {
-        listOf("image/jpeg", "image/png", "image/gif", "image/webp", "image/heic", "image/heif", "image/x-adobe-dng",
-            "video/mp4", "video/quicktime", "video/x-matroska", "video/webm", "video/3gpp").forEach {
+        listOf(
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+            "image/heic",
+            "image/heif",
+            "image/x-adobe-dng",
+            "video/mp4",
+            "video/quicktime",
+            "video/x-matroska",
+            "video/webm",
+            "video/3gpp",
+        ).forEach {
             assertTrue(it, MediaTransfer.isPhotoOrVideo(it))
         }
     }

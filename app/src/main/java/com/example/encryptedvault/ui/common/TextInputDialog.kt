@@ -14,7 +14,14 @@ import androidx.compose.ui.Modifier
 
 /** One-line text prompt (rename album, name a person, …). Confirm is disabled while the text is blank. */
 @Composable
-fun TextInputDialog(title: String, label: String, initial: String = "", confirmLabel: String = "Save", onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
+fun TextInputDialog(
+    title: String,
+    label: String,
+    initial: String = "",
+    confirmLabel: String = "Save",
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
     var text by remember { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,

@@ -4,7 +4,10 @@ package com.example.encryptedvault.media
 enum class RestoreCollection { IMAGES, VIDEO, DOWNLOADS }
 
 /** Where a file leaves the vault: a MediaStore collection plus a relative folder (always ends with `/`). */
-data class RestoreTarget(val collection: RestoreCollection, val relativePath: String)
+data class RestoreTarget(
+    val collection: RestoreCollection,
+    val relativePath: String,
+)
 
 /**
  * Decides where an item goes when it is restored out of the vault.
@@ -21,7 +24,10 @@ object RestoreTargets {
     private val DOWNLOAD_ROOTS = setOf("Download", "Downloads")
 
     /** Decides which MediaStore collection and folder an item returns to. A pure function so the folder rules are unit-tested. */
-    fun resolve(isVideo: Boolean, sourceFolder: String?): RestoreTarget {
+    fun resolve(
+        isVideo: Boolean,
+        sourceFolder: String?,
+    ): RestoreTarget {
         val folder = sourceFolder?.trim('/', ' ')?.takeIf { it.isNotEmpty() }
         val defaultRoot = if (isVideo) "Movies" else "Pictures"
         val collection = if (isVideo) RestoreCollection.VIDEO else RestoreCollection.IMAGES

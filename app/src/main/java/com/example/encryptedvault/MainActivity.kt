@@ -22,13 +22,22 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Hardened builds refuse to run when repackaged as debuggable or when a debugger is attached (see Integrity).
-        if (Integrity.check(applicationContext, BuildConfig.HARDENED) != null) { finishAndRemoveTask(); return }
+        if (Integrity.check(applicationContext, BuildConfig.HARDENED) != null) {
+            finishAndRemoveTask()
+            return
+        }
         enableEdgeToEdge()
         // Screenshots, screen recording and the recents preview are always blocked, in every build (Gap 6).
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         settings = AppSettings(applicationContext)
         MediaTransfer.sweepTemporaryPlaintext(applicationContext, olderThanMs = 10 * 60_000L) // leftover share/playback plaintext
-        val words = assets.open("bip39_english.txt").bufferedReader().readLines().map { it.trim() }.filter { it.isNotEmpty() }
+        val words =
+            assets
+                .open("bip39_english.txt")
+                .bufferedReader()
+                .readLines()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
         val keys = KeyHierarchy(applicationContext)
         val bip39 = Bip39(words)
         setContent { VaultRoot(keys, bip39, settings) }
@@ -46,7 +55,10 @@ class MainActivity : FragmentActivity() {
         if (SessionManager.consumeStopLock()) lockNow()
     }
 
-    override fun onMultiWindowModeChanged(isInMultiWindowMode: Boolean, newConfig: Configuration) {
+    override fun onMultiWindowModeChanged(
+        isInMultiWindowMode: Boolean,
+        newConfig: Configuration,
+    ) {
         super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig)
         Log.i(TAG, "onMultiWindowModeChanged: $isInMultiWindowMode")
         if (isInMultiWindowMode) lockNow()

@@ -42,7 +42,13 @@ private val FRAME = Color.White
  * Drags are reported to [onCropChange] as image fractions, so the frame keeps its shape when [lockRatio] is set.
  */
 @Composable
-fun CropOverlay(crop: CropBox, lockRatio: Float?, imageAspect: Float, onCropChange: (CropBox) -> Unit, modifier: Modifier = Modifier) {
+fun CropOverlay(
+    crop: CropBox,
+    lockRatio: Float?,
+    imageAspect: Float,
+    onCropChange: (CropBox) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     var boxSize by remember { mutableStateOf(IntSize.Zero) }
     val currentCrop by rememberUpdatedState(crop)
     val currentRatio by rememberUpdatedState(lockRatio)
@@ -73,8 +79,7 @@ fun CropOverlay(crop: CropBox, lockRatio: Float?, imageAspect: Float, onCropChan
                             (x * boxSize.width - HANDLE_TOUCH.toPx() / 2).roundToInt(),
                             (y * boxSize.height - HANDLE_TOUCH.toPx() / 2).roundToInt(),
                         )
-                    }
-                    .size(HANDLE_TOUCH)
+                    }.size(HANDLE_TOUCH)
                     .semantics { contentDescription = "Crop corner ${corner.name.lowercase().replace('_', ' ')}" }
                     .pointerInput(corner) {
                         detectDragGestures { change, drag ->

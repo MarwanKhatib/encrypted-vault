@@ -2,8 +2,8 @@ package com.example.encryptedvault
 
 import androidx.room.testing.MigrationTestHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.example.encryptedvault.crypto.Bip39
 import com.example.encryptedvault.crypto.KeyHierarchy
 import com.example.encryptedvault.crypto.VaultFiles
@@ -15,19 +15,22 @@ import com.example.encryptedvault.data.VaultStorage
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import java.io.ByteArrayInputStream
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.ByteArrayInputStream
 
 /** Verifies every schema upgrade keeps existing photos (Gap 11). Uses the schemas exported to app/schemas. */
 @RunWith(AndroidJUnit4::class)
 class DatabaseMigrationTest {
-
     @get:Rule
-    val helper = MigrationTestHelper(
-        InstrumentationRegistry.getInstrumentation(), VaultDatabase::class.java, emptyList(), FrameworkSQLiteOpenHelperFactory(),
-    )
+    val helper =
+        MigrationTestHelper(
+            InstrumentationRegistry.getInstrumentation(),
+            VaultDatabase::class.java,
+            emptyList(),
+            FrameworkSQLiteOpenHelperFactory(),
+        )
 
     @Test
     fun migratesFromV1ToLatestKeepingRows() {
@@ -41,7 +44,10 @@ class DatabaseMigrationTest {
             assertEquals("h1", c.getString(0))
             assertEquals(1000L, c.getLong(2))
             assertEquals("complete", c.getString(3))
-            assertEquals(0L, c.getLong(4)); assertEquals(0L, c.getLong(5)); assertEquals(0L, c.getLong(6)); assertEquals(0L, c.getLong(7))
+            assertEquals(0L, c.getLong(4))
+            assertEquals(0L, c.getLong(5))
+            assertEquals(0L, c.getLong(6))
+            assertEquals(0L, c.getLong(7))
             assertTrue(c.isNull(8))
         }
     }
@@ -49,13 +55,16 @@ class DatabaseMigrationTest {
     @Test
     fun migratesFromV2DroppingClearTextNameButKeepingFavorites() {
         helper.createDatabase(DB, 2).apply {
-            execSQL("INSERT INTO photos (hash, mimeType, timestamp, status, name, size, favorite) VALUES ('h2', 'video/mp4', 2000, 'complete', 'secret-name.mp4', 55, 1)")
+            execSQL(
+                "INSERT INTO photos (hash, mimeType, timestamp, status, name, size, favorite) VALUES ('h2', 'video/mp4', 2000, 'complete', 'secret-name.mp4', 55, 1)",
+            )
             close()
         }
         val db = helper.runMigrationsAndValidate(DB, 3, true, VaultDatabase.MIGRATION_2_3)
         db.query("SELECT size, favorite FROM photos WHERE hash = 'h2'").use { c ->
             assertTrue(c.moveToFirst())
-            assertEquals(55L, c.getLong(0)); assertEquals(1L, c.getLong(1))
+            assertEquals(55L, c.getLong(0))
+            assertEquals(1L, c.getLong(1))
         }
         db.query("SELECT name FROM pragma_table_info('photos')").use { c ->
             while (c.moveToNext()) assertTrue("clear-text name column must be gone", c.getString(0) != "name")
@@ -71,7 +80,10 @@ class DatabaseMigrationTest {
         val db = helper.runMigrationsAndValidate(DB, 4, true, VaultDatabase.MIGRATION_3_4)
         db.query("SELECT hidden, width, height, favorite FROM photos WHERE hash = 'h3'").use { c ->
             assertTrue(c.moveToFirst())
-            assertEquals(0L, c.getLong(0)); assertEquals(0L, c.getLong(1)); assertEquals(0L, c.getLong(2)); assertEquals(1L, c.getLong(3))
+            assertEquals(0L, c.getLong(0))
+            assertEquals(0L, c.getLong(1))
+            assertEquals(0L, c.getLong(2))
+            assertEquals(1L, c.getLong(3))
         }
     }
 
@@ -85,8 +97,14 @@ class DatabaseMigrationTest {
             close()
         }
         val db = helper.runMigrationsAndValidate(DB, 5, true, VaultDatabase.MIGRATION_4_5)
-        db.query("SELECT count(*) FROM photos WHERE hash = 'h4'").use { c -> assertTrue(c.moveToFirst()); assertEquals(1L, c.getLong(0)) }
-        db.query("SELECT count(*) FROM albums").use { c -> assertTrue(c.moveToFirst()); assertEquals(1L, c.getLong(0)) }
+        db.query("SELECT count(*) FROM photos WHERE hash = 'h4'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(1L, c.getLong(0))
+        }
+        db.query("SELECT count(*) FROM albums").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(1L, c.getLong(0))
+        }
         db.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'people'").use { c -> assertEquals(0, c.count) }
     }
 
@@ -96,7 +114,15 @@ class DatabaseMigrationTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val keys = KeyHierarchy(context).apply { destroyAllKeyMaterial() }
         try {
-            val bip39 = Bip39(context.assets.open("bip39_english.txt").bufferedReader().readLines().map { it.trim() }.filter { it.isNotEmpty() })
+            val bip39 =
+                Bip39(
+                    context.assets
+                        .open("bip39_english.txt")
+                        .bufferedReader()
+                        .readLines()
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() },
+                )
             keys.setUp(pin, bip39)
             val key = checkNotNull(keys.unlockWithPin(pin))
             val content = ByteArray(5000) { (it * 7).toByte() }

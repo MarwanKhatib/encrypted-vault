@@ -12,17 +12,28 @@ import java.util.Locale
  * Pure Kotlin so it is unit-tested off-device.
  */
 object SearchMatcher {
-
     /** True when every whitespace-separated word of [query] occurs in the item's searchable text; a blank query matches all. */
-    fun matches(item: VaultItem, query: String, zone: ZoneId = ZoneId.systemDefault()): Boolean {
-        val words = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    fun matches(
+        item: VaultItem,
+        query: String,
+        zone: ZoneId = ZoneId.systemDefault(),
+    ): Boolean {
+        val words =
+            query
+                .trim()
+                .lowercase()
+                .split(Regex("\\s+"))
+                .filter { it.isNotEmpty() }
         if (words.isEmpty()) return true
         val haystack = searchableText(item, zone)
         return words.all { it in haystack }
     }
 
     /** The lower-cased text a query is matched against. Exposed (internal) so tests can assert what is searchable. */
-    internal fun searchableText(item: VaultItem, zone: ZoneId): String {
+    internal fun searchableText(
+        item: VaultItem,
+        zone: ZoneId,
+    ): String {
         val date = Instant.ofEpochMilli(item.takenAt).atZone(zone)
         return buildList {
             add(item.displayName)

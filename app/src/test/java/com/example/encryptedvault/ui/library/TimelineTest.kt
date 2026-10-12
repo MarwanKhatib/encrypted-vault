@@ -12,13 +12,14 @@ import java.time.ZoneOffset
 
 class TimelineTest {
     private val utc = ZoneOffset.UTC
-    private val items = listOf(
-        testItem(1, LocalDate.of(2025, 1, 20)),
-        testItem(2, LocalDate.of(2025, 1, 20)),
-        testItem(3, LocalDate.of(2025, 1, 5)),
-        testItem(4, LocalDate.of(2024, 12, 31)),
-        testItem(5, LocalDate.of(2023, 6, 1)),
-    )
+    private val items =
+        listOf(
+            testItem(1, LocalDate.of(2025, 1, 20)),
+            testItem(2, LocalDate.of(2025, 1, 20)),
+            testItem(3, LocalDate.of(2025, 1, 5)),
+            testItem(4, LocalDate.of(2024, 12, 31)),
+            testItem(5, LocalDate.of(2023, 6, 1)),
+        )
 
     @Test
     fun groupsByDayKeepingOrder() {
@@ -32,7 +33,13 @@ class TimelineTest {
     fun groupsByMonthAndYear() {
         assertEquals(listOf(YearMonth.of(2025, 1), YearMonth.of(2024, 12), YearMonth.of(2023, 6)), Timeline.byMonth(items, utc).map { it.key })
         assertEquals(listOf(2025, 2024, 2023), Timeline.byYear(items, utc).map { it.key })
-        assertEquals(3, Timeline.byYear(items, utc).first().items.size)
+        assertEquals(
+            3,
+            Timeline
+                .byYear(items, utc)
+                .first()
+                .items.size,
+        )
     }
 
     @Test
@@ -69,10 +76,14 @@ class TimelineTest {
 
     @Test
     fun eventsSplitWhenTheGapExceedsTwoDays() {
-        val list = listOf(
-            testItem(1, LocalDate.of(2025, 3, 20)), testItem(2, LocalDate.of(2025, 3, 19)), testItem(3, LocalDate.of(2025, 3, 17)),
-            testItem(4, LocalDate.of(2025, 3, 10)), testItem(5, LocalDate.of(2025, 3, 9)),
-        )
+        val list =
+            listOf(
+                testItem(1, LocalDate.of(2025, 3, 20)),
+                testItem(2, LocalDate.of(2025, 3, 19)),
+                testItem(3, LocalDate.of(2025, 3, 17)),
+                testItem(4, LocalDate.of(2025, 3, 10)),
+                testItem(5, LocalDate.of(2025, 3, 9)),
+            )
         val events = Timeline.byEvent(list, zone = utc)
         assertEquals(2, events.size)
         assertEquals(LocalDate.of(2025, 3, 17), events[0].firstDay)

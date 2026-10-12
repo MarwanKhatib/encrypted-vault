@@ -27,13 +27,22 @@ class VaultFilesTest {
 
     private fun bytes(n: Int) = ByteArray(n).also { SecureRandom().nextBytes(it) }
 
-    private fun encrypt(plain: ByteArray, name: String = "a.enc", with: SecretKey = key): File =
-        File(tmp.root, name).also { VaultFiles.encryptAtomic(with, ByteArrayInputStream(plain), it) }
+    private fun encrypt(
+        plain: ByteArray,
+        name: String = "a.enc",
+        with: SecretKey = key,
+    ): File = File(tmp.root, name).also { VaultFiles.encryptAtomic(with, ByteArrayInputStream(plain), it) }
 
-    private fun decrypt(file: File, with: SecretKey = key): ByteArray = VaultFiles.decryptStream(with, file).use { it.readBytes() }
+    private fun decrypt(
+        file: File,
+        with: SecretKey = key,
+    ): ByteArray = VaultFiles.decryptStream(with, file).use { it.readBytes() }
 
     /** Writes a file the way the pre-streaming app did (single AES-GCM message), to prove old vaults still open. */
-    private fun legacyFile(plain: ByteArray, name: String): File {
+    private fun legacyFile(
+        plain: ByteArray,
+        name: String,
+    ): File {
         val iv = bytes(12)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv)) }
         return File(tmp.root, name).also { it.writeBytes(iv + cipher.doFinal(plain)) }
@@ -97,7 +106,10 @@ class VaultFilesTest {
     }
 
     @Test fun failedEncryptionLeavesNoPartialDestination() {
-        val failing = object : java.io.InputStream() { override fun read(): Int = throw IOException("disk read error") }
+        val failing =
+            object : java.io.InputStream() {
+                override fun read(): Int = throw IOException("disk read error")
+            }
         val dest = File(tmp.root, "broken.enc")
         assertThrows(IOException::class.java) { VaultFiles.encryptAtomic(key, failing, dest) }
         assertFalse(dest.exists())
@@ -142,7 +154,11 @@ class VaultFilesTest {
                 ch.position(offset.toLong())
                 val buf = ByteBuffer.allocate(20)
                 var read = 0
-                while (read < 20) { val n = ch.read(buf); if (n < 0) break; read += n }
+                while (read < 20) {
+                    val n = ch.read(buf)
+                    if (n < 0) break
+                    read += n
+                }
                 assertArrayEquals("offset $offset", plain.copyOfRange(offset, offset + 20), buf.array())
             }
         }

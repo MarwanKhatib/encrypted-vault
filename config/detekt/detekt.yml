@@ -1,0 +1,25 @@
+# Detekt configuration. Starts from the defaults (buildUponDefaultConfig) and relaxes rules that do not fit Compose UI code.
+# Real problems (long methods, swallowed exceptions, wildcard imports, complexity) stay enforced.
+config:
+  validation: true
+
+style:
+  MaxLineLength:
+    maxLineLength: 160
+  MagicNumber:
+    ignoreAnnotated:
+      - 'Composable'
+    ignoreNumbers:
+      - '-1'
+      - '0'
+      - '1'
+      - '2'
+      - '3'
+      - '4'
+      - '100'
+      - '1000'
+
+naming:
+  FunctionNaming:
+    ignoreAnnotated:
+      - 'Composable'

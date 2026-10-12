@@ -11,21 +11,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.RotateLeft
 import androidx.compose.material.icons.automirrored.rounded.RotateRight
 import androidx.compose.material.icons.rounded.Flip
-import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -71,7 +71,10 @@ private const val SAVE_EDGE = 4096
  * [onDone] gets a message for the caller's snackbar and the editor is expected to be closed by the caller.
  */
 @Composable
-fun EditScreen(item: VaultItem, onDone: (String?) -> Unit) {
+fun EditScreen(
+    item: VaultItem,
+    onDone: (String?) -> Unit,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var edit by remember { mutableStateOf(Edit()) }
@@ -86,12 +89,20 @@ fun EditScreen(item: VaultItem, onDone: (String?) -> Unit) {
     fun save() {
         saving = true
         scope.launch {
-            val staged = withContext(Dispatchers.IO) {
-                MediaTransfer.loadFullImage(context, item, SAVE_EDGE)?.let { full ->
-                    MediaTransfer.stageBitmap(context, ImageEdits.apply(full, edit), SourceInfo(ImageEdits.editedName(item.name), item.sourceFolder, item.takenAt))
+            val staged =
+                withContext(Dispatchers.IO) {
+                    MediaTransfer.loadFullImage(context, item, SAVE_EDGE)?.let { full ->
+                        MediaTransfer.stageBitmap(
+                            context,
+                            ImageEdits.apply(full, edit),
+                            SourceInfo(ImageEdits.editedName(item.name), item.sourceFolder, item.takenAt),
+                        )
+                    }
                 }
+            if (staged == null) {
+                onDone("Couldn't edit this photo.")
+                return@launch
             }
-            if (staged == null) { onDone("Couldn't edit this photo."); return@launch }
             val imported = ImportWorker.importAndWait(context, staged)
             onDone(if (imported) "Saved an edited copy." else "Saving failed; the original is untouched.")
         }
@@ -102,7 +113,13 @@ fun EditScreen(item: VaultItem, onDone: (String?) -> Unit) {
             Column(Modifier.fillMaxSize().systemBarsPadding()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { onDone(null) }, enabled = !saving) { Text("Cancel") }
-                    Text("Edit", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Text(
+                        "Edit",
+                        Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
                     Button(onClick = ::save, enabled = !edit.isIdentity && !saving && preview != null) { Text(if (saving) "Saving…" else "Save") }
                 }
                 Box(Modifier.weight(1f).fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
@@ -123,16 +140,36 @@ fun EditScreen(item: VaultItem, onDone: (String?) -> Unit) {
                     }
                 }
                 Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()).padding(bottom = 8.dp)) {
-                    Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier.padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         IconButton(onClick = { edit = edit.rotated(-90) }) { Icon(Icons.AutoMirrored.Rounded.RotateLeft, "Rotate left") }
                         IconButton(onClick = { edit = edit.rotated(90) }) { Icon(Icons.AutoMirrored.Rounded.RotateRight, "Rotate right") }
-                        FilterChip(edit.flipHorizontal, { edit = edit.flipped() }, { Text("Flip") }, leadingIcon = { Icon(Icons.Rounded.Flip, null, Modifier.size(18.dp)) })
+                        FilterChip(
+                            edit.flipHorizontal,
+                            { edit = edit.flipped() },
+                            { Text("Flip") },
+                            leadingIcon = { Icon(Icons.Rounded.Flip, null, Modifier.size(18.dp)) },
+                        )
                         TextButton(onClick = { edit = Edit() }, enabled = !edit.isIdentity) { Text("Reset") }
                     }
-                    LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyRow(
+                        contentPadding =
+                            androidx.compose.foundation.layout
+                                .PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         items(CropAspect.entries) { a -> FilterChip(edit.aspect == a, { edit = edit.withAspect(a, imageAspect) }, { Text(a.label) }) }
                     }
-                    LazyRow(Modifier.padding(top = 4.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyRow(
+                        Modifier.padding(top = 4.dp),
+                        contentPadding =
+                            androidx.compose.foundation.layout
+                                .PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         items(PhotoFilter.entries) { f -> FilterChip(edit.filter == f, { edit = edit.copy(filter = f) }, { Text(f.label) }) }
                     }
                     EditSlider("Brightness", edit.brightness, -0.5f..0.5f) { edit = edit.copy(brightness = it) }
@@ -146,7 +183,12 @@ fun EditScreen(item: VaultItem, onDone: (String?) -> Unit) {
 
 /** Label plus slider for one adjustment. */
 @Composable
-private fun EditSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
+private fun EditSlider(
+    label: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    onChange: (Float) -> Unit,
+) {
     Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.padding(end = 12.dp).weight(0.35f), style = MaterialTheme.typography.bodyMedium)
         Slider(value, onChange, Modifier.weight(0.65f).semantics { contentDescription = label }, valueRange = range)

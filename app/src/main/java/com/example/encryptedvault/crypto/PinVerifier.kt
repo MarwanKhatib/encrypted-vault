@@ -25,7 +25,11 @@ object PinVerifier {
     fun newSalt(): ByteArray = ByteArray(SALT_BYTES).also { SecureRandom().nextBytes(it) }
 
     /** Derives 32 bytes from [pin]. The PBEKeySpec password copy is wiped before returning. */
-    fun derive(pin: CharArray, salt: ByteArray, iterations: Int): ByteArray {
+    fun derive(
+        pin: CharArray,
+        salt: ByteArray,
+        iterations: Int,
+    ): ByteArray {
         val spec = PBEKeySpec(pin, salt, iterations, KEY_BITS)
         try {
             return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
@@ -35,6 +39,10 @@ object PinVerifier {
     }
 
     /** True when [pin] derives exactly [expected]; compared in constant time so timing leaks nothing about how many bytes matched. */
-    fun matches(pin: CharArray, salt: ByteArray, iterations: Int, expected: ByteArray): Boolean =
-        MessageDigest.isEqual(derive(pin, salt, iterations), expected)
+    fun matches(
+        pin: CharArray,
+        salt: ByteArray,
+        iterations: Int,
+        expected: ByteArray,
+    ): Boolean = MessageDigest.isEqual(derive(pin, salt, iterations), expected)
 }

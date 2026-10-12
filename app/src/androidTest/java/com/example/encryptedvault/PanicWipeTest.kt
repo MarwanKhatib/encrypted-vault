@@ -20,9 +20,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.IOException
-import java.io.ByteArrayInputStream
 
 /** End-to-end check of the duress wipe on a real device: files, database, cache and keys all go; a new empty vault opens. */
 @RunWith(AndroidJUnit4::class)
@@ -38,7 +38,15 @@ class PanicWipeTest {
         keys.destroyAllKeyMaterial()
         VaultDatabase.destroy(context)
         VaultStorage.directory(context).listFiles()?.forEach { it.delete() }
-        bip39 = Bip39(context.assets.open("bip39_english.txt").bufferedReader().readLines().map { it.trim() }.filter { it.isNotEmpty() })
+        bip39 =
+            Bip39(
+                context.assets
+                    .open("bip39_english.txt")
+                    .bufferedReader()
+                    .readLines()
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() },
+            )
     }
 
     @After fun tearDown() {
@@ -51,7 +59,10 @@ class PanicWipeTest {
     private fun populate(count: Int = 3): Pair<javax.crypto.SecretKey, File> {
         keys.setUp(realPin, bip39)
         val oldKey = keys.unlockWithPin(realPin)!!
-        val files = (1..count).map { i -> VaultStorage.content(context, "hash$i").also { VaultFiles.encryptAtomic(oldKey, ByteArrayInputStream(ByteArray(2048) { i.toByte() }), it) } }
+        val files =
+            (1..count).map { i ->
+                VaultStorage.content(context, "hash$i").also { VaultFiles.encryptAtomic(oldKey, ByteArrayInputStream(ByteArray(2048) { i.toByte() }), it) }
+            }
         File(context.cacheDir, "import").apply { mkdirs() }.let { File(it, "staged.mp4").writeBytes(ByteArray(100)) }
         VaultDatabase.get(context).openHelper.writableDatabase // make sure vault.db exists on disk
         return oldKey to files.first()
@@ -95,7 +106,11 @@ class PanicWipeTest {
     @Test fun theDatabaseIsEmptyAfterTheWipe() {
         populate()
         PanicWipe.execute(context, keys, duressPin, bip39)
-        val count = VaultDatabase.get(context).openHelper.readableDatabase.query("SELECT count(*) FROM photos").use { it.moveToFirst(); it.getInt(0) }
+        val count =
+            VaultDatabase.get(context).openHelper.readableDatabase.query("SELECT count(*) FROM photos").use {
+                it.moveToFirst()
+                it.getInt(0)
+            }
         assertEquals(0, count)
     }
 }

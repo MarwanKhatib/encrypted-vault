@@ -23,11 +23,15 @@ fun rememberThumbnail(item: VaultItem): State<Bitmap?> {
 
 /** Shared decrypt-once loader: checks the in-memory cache first, then decrypts [file] off the main thread. */
 @Composable
-private fun rememberDecryptedBitmap(cacheKey: String, file: () -> File): State<Bitmap?> =
+private fun rememberDecryptedBitmap(
+    cacheKey: String,
+    file: () -> File,
+): State<Bitmap?> =
     produceState(SessionManager.thumbCache.get(cacheKey), cacheKey) {
         if (value != null) return@produceState
-        value = withContext(Dispatchers.IO) {
-            val key = VaultApp.sessionKey ?: return@withContext null
-            MediaTransfer.loadEncryptedJpeg(key, file())?.also { SessionManager.thumbCache.put(cacheKey, it) }
-        }
+        value =
+            withContext(Dispatchers.IO) {
+                val key = VaultApp.sessionKey ?: return@withContext null
+                MediaTransfer.loadEncryptedJpeg(key, file())?.also { SessionManager.thumbCache.put(cacheKey, it) }
+            }
     }

@@ -36,17 +36,30 @@ class VaultDataSourceTest {
         file = File(dir, "$hash.enc").also { VaultFiles.encryptAtomic(key, ByteArrayInputStream(plain), it) }
     }
 
-    @After fun cleanUp() { dir.deleteRecursively() }
+    @After fun cleanUp() {
+        dir.deleteRecursively()
+    }
 
     private fun source(currentKey: SecretKey? = key) = VaultDataSource({ currentKey }, { File(dir, "$it.enc") })
 
-    private fun spec(position: Long = 0, length: Long = C.LENGTH_UNSET.toLong()) =
-        DataSpec.Builder().setUri(Uri.parse("vault://$hash")).setPosition(position).setLength(length).build()
+    private fun spec(
+        position: Long = 0,
+        length: Long = C.LENGTH_UNSET.toLong(),
+    ) = DataSpec
+        .Builder()
+        .setUri(Uri.parse("vault://$hash"))
+        .setPosition(position)
+        .setLength(length)
+        .build()
 
     private fun VaultDataSource.readAll(): ByteArray {
         val out = java.io.ByteArrayOutputStream()
         val buf = ByteArray(8192)
-        while (true) { val n = read(buf, 0, buf.size); if (n == C.RESULT_END_OF_INPUT) break; out.write(buf, 0, n) }
+        while (true) {
+            val n = read(buf, 0, buf.size)
+            if (n == C.RESULT_END_OF_INPUT) break
+            out.write(buf, 0, n)
+        }
         return out.toByteArray()
     }
 
@@ -79,7 +92,10 @@ class VaultDataSourceTest {
     @Test fun aWrongKeyFailsWhileReading() {
         val wrong = SecretKeySpec(ByteArray(32) { 9 }, "AES")
         val ds = source(wrong)
-        assertThrows(IOException::class.java) { ds.open(spec()); ds.readAll() }
+        assertThrows(IOException::class.java) {
+            ds.open(spec())
+            ds.readAll()
+        }
         ds.close()
     }
 
@@ -91,7 +107,8 @@ class VaultDataSourceTest {
     @Test fun closeIsIdempotentAndForgetsTheUri() {
         val ds = source()
         ds.open(spec())
-        ds.close(); ds.close()
+        ds.close()
+        ds.close()
         assertEquals(null, ds.uri)
     }
 }

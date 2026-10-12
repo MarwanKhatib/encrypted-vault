@@ -1,11 +1,11 @@
 package com.example.encryptedvault.ui.common
 
 import android.content.Context
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
@@ -104,21 +104,33 @@ class ItemActions(
     }
 
     /** Asks the UI to show the restore-to-gallery confirmation for [items]. */
-    fun requestRestore(items: List<VaultItem>) { restoreRequest = items }
+    fun requestRestore(items: List<VaultItem>) {
+        restoreRequest = items
+    }
+
     /** Asks the UI to confirm permanent deletion of [items]. */
-    fun requestDeleteForever(items: List<VaultItem>) { deleteForeverRequest = items }
+    fun requestDeleteForever(items: List<VaultItem>) {
+        deleteForeverRequest = items
+    }
+
     /** Asks the UI to show the album picker for [items]. */
-    fun requestAddToAlbum(items: List<VaultItem>) { addToAlbumRequest = items }
+    fun requestAddToAlbum(items: List<VaultItem>) {
+        addToAlbumRequest = items
+    }
 
     /** Writes decrypted copies back to the gallery and, when [removeFromVault] is set, removes only the items that restored successfully. */
-    internal fun performRestore(items: List<VaultItem>, removeFromVault: Boolean) {
+    internal fun performRestore(
+        items: List<VaultItem>,
+        removeFromVault: Boolean,
+    ) {
         scope.launch {
             val result = withContext(Dispatchers.IO) { MediaTransfer.restoreToGallery(context, items) }
             if (removeFromVault) repository.deleteForever(items.filter { it.id in result.restoredIds })
-            val message = buildString {
-                append("Restored ${result.restoredIds.size} to original folders")
-                if (result.failed > 0) append("; ${result.failed} failed")
-            }
+            val message =
+                buildString {
+                    append("Restored ${result.restoredIds.size} to original folders")
+                    if (result.failed > 0) append("; ${result.failed} failed")
+                }
             snackbar.showSnackbar(message)
         }
     }
@@ -132,7 +144,11 @@ class ItemActions(
     }
 
     /** Adds [items] to [albumId], or to a newly created album when [newAlbumName] is set. */
-    internal fun performAddToAlbum(items: List<VaultItem>, albumId: Long, newAlbumName: String?) {
+    internal fun performAddToAlbum(
+        items: List<VaultItem>,
+        albumId: Long,
+        newAlbumName: String?,
+    ) {
         scope.launch {
             val targetId = if (newAlbumName != null) repository.createAlbum(newAlbumName) else albumId
             repository.addToAlbum(targetId, items.map { it.id })
@@ -143,7 +159,11 @@ class ItemActions(
 
 /** Remembers an [ItemActions] for this composition; rebuilt when [albums] changes so the album picker lists the current albums. */
 @Composable
-fun rememberItemActions(settings: AppSettings, snackbar: SnackbarHostState, albums: List<Album>): ItemActions {
+fun rememberItemActions(
+    settings: AppSettings,
+    snackbar: SnackbarHostState,
+    albums: List<Album>,
+): ItemActions {
     val context = LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     return remember(albums) { ItemActions(context, scope, snackbar, settings, VaultRepository.get(context), albums) }
@@ -151,7 +171,10 @@ fun rememberItemActions(settings: AppSettings, snackbar: SnackbarHostState, albu
 
 /** Renders whichever confirmation dialog [actions] currently has pending. */
 @Composable
-fun ItemActionDialogs(actions: ItemActions, onDone: () -> Unit = {}) {
+fun ItemActionDialogs(
+    actions: ItemActions,
+    onDone: () -> Unit = {},
+) {
     actions.restoreRequest?.let { items ->
         var removeFromVault by remember { mutableStateOf(true) }
         val folders = items.mapNotNull { it.sourceFolder }.distinct()
@@ -163,15 +186,24 @@ fun ItemActionDialogs(actions: ItemActions, onDone: () -> Unit = {}) {
                     Text(
                         "Each item returns to the folder it came from" +
                             (if (folders.isNotEmpty()) " (${folders.take(3).joinToString()}${if (folders.size > 3) "…" else ""})" else "") +
-                            ". Missing folders are created. The restored copies are NOT encrypted."
+                            ". Missing folders are created. The restored copies are NOT encrypted.",
                     )
-                    Row(Modifier.fillMaxWidth().clickable { removeFromVault = !removeFromVault }.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier.fillMaxWidth().clickable { removeFromVault = !removeFromVault }.padding(top = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Checkbox(removeFromVault, { removeFromVault = it })
                         Text("Remove from vault after restoring")
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { actions.restoreRequest = null; actions.performRestore(items, removeFromVault); onDone() }) { Text("Restore") } },
+            confirmButton = {
+                TextButton(onClick = {
+                    actions.restoreRequest = null
+                    actions.performRestore(items, removeFromVault)
+                    onDone()
+                }) { Text("Restore") }
+            },
             dismissButton = { TextButton(onClick = { actions.restoreRequest = null }) { Text("Cancel") } },
         )
     }
@@ -182,7 +214,11 @@ fun ItemActionDialogs(actions: ItemActions, onDone: () -> Unit = {}) {
             title = { Text("Delete ${Formatters.itemCount(items.size)} permanently?") },
             text = { Text("The encrypted files are removed for good. This cannot be undone.") },
             confirmButton = {
-                TextButton(onClick = { actions.deleteForeverRequest = null; actions.performDeleteForever(items); onDone() }) {
+                TextButton(onClick = {
+                    actions.deleteForeverRequest = null
+                    actions.performDeleteForever(items)
+                    onDone()
+                }) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
@@ -199,15 +235,32 @@ fun ItemActionDialogs(actions: ItemActions, onDone: () -> Unit = {}) {
                 Column {
                     actions.albums.forEach { album ->
                         Text(
-                            album.name, Modifier.fillMaxWidth().clickable { actions.addToAlbumRequest = null; actions.performAddToAlbum(items, album.id, null); onDone() }.padding(vertical = 12.dp),
+                            album.name,
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    actions.addToAlbumRequest = null
+                                    actions.performAddToAlbum(items, album.id, null)
+                                    onDone()
+                                }.padding(vertical = 12.dp),
                             style = MaterialTheme.typography.bodyLarge,
                         )
                     }
-                    OutlinedTextField(newName, { newName = it }, label = { Text("New album") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                    OutlinedTextField(
+                        newName,
+                        { newName = it },
+                        label = { Text("New album") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
                 }
             },
             confirmButton = {
-                TextButton(enabled = newName.isNotBlank(), onClick = { actions.addToAlbumRequest = null; actions.performAddToAlbum(items, -1, newName); onDone() }) { Text("Create & add") }
+                TextButton(enabled = newName.isNotBlank(), onClick = {
+                    actions.addToAlbumRequest = null
+                    actions.performAddToAlbum(items, -1, newName)
+                    onDone()
+                }) { Text("Create & add") }
             },
             dismissButton = { TextButton(onClick = { actions.addToAlbumRequest = null }) { Text("Cancel") } },
         )

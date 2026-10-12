@@ -20,33 +20,46 @@ import javax.crypto.SecretKey
  * master key, so while the vault is locked every flow emits an empty list and nothing readable
  * can leak through the UI layer.
  */
-class VaultRepository private constructor(private val context: Context, private val db: VaultDatabase) {
-
+class VaultRepository private constructor(
+    private val context: Context,
+    private val db: VaultDatabase,
+) {
     // ---- Observation ------------------------------------------------------------------------
 
     /** Every completed item, including those in Recently Deleted. Empty while the vault is locked. */
-    val items: Flow<List<VaultItem>> = whenUnlocked { key ->
-        db.photoDao().observeCompleted().map { rows -> rows.map { it.toItem(key) } }
-    }
+    val items: Flow<List<VaultItem>> =
+        whenUnlocked { key ->
+            db.photoDao().observeCompleted().map { rows -> rows.map { it.toItem(key) } }
+        }
 
     /** All albums with their member ids, joined from the albums and album_items tables. */
-    val albums: Flow<List<Album>> = whenUnlocked { key ->
-        combine(db.albumDao().observeAlbums(), db.albumDao().observeLinks()) { albums, links ->
-            val idsByAlbum = links.groupBy({ it.albumId }, { it.photoId })
-            albums.map { Album(it.id, decryptText(key, it.nameEnc), idsByAlbum[it.id].orEmpty().toSet()) }
+    val albums: Flow<List<Album>> =
+        whenUnlocked { key ->
+            combine(db.albumDao().observeAlbums(), db.albumDao().observeLinks()) { albums, links ->
+                val idsByAlbum = links.groupBy({ it.albumId }, { it.photoId })
+                albums.map { Album(it.id, decryptText(key, it.nameEnc), idsByAlbum[it.id].orEmpty().toSet()) }
+            }
         }
-    }
 
     // ---- Item mutations ---------------------------------------------------------------------
 
     /** Marks or un-marks [ids] as favourite. */
-    suspend fun setFavorite(ids: List<Long>, favorite: Boolean) = db.photoDao().setFavorite(ids, favorite)
+    suspend fun setFavorite(
+        ids: List<Long>,
+        favorite: Boolean,
+    ) = db.photoDao().setFavorite(ids, favorite)
 
     /** Hides [ids] from the Library (they stay reachable through the Hidden album). */
-    suspend fun setHidden(ids: List<Long>, hidden: Boolean) = db.photoDao().setHidden(ids, hidden)
+    suspend fun setHidden(
+        ids: List<Long>,
+        hidden: Boolean,
+    ) = db.photoDao().setHidden(ids, hidden)
 
     /** Stores a trimmed user caption inside the encrypted metadata of one item. */
-    suspend fun setCaption(itemId: Long, caption: String) = updateMetadata(itemId) { it.copy(caption = caption.trim()) }
+    suspend fun setCaption(
+        itemId: Long,
+        caption: String,
+    ) = updateMetadata(itemId) { it.copy(caption = caption.trim()) }
 
     /** Moves items to Recently Deleted (recoverable for [TRASH_RETENTION_DAYS] days). */
     suspend fun moveToTrash(ids: List<Long>) = db.photoDao().setDeletedAt(ids, System.currentTimeMillis())
@@ -74,7 +87,10 @@ class VaultRepository private constructor(private val context: Context, private 
     }
 
     /** Reads, transforms and re-encrypts the metadata of one item. A no-op while the vault is locked. */
-    suspend fun updateMetadata(itemId: Long, transform: (PhotoMetadata) -> PhotoMetadata) {
+    suspend fun updateMetadata(
+        itemId: Long,
+        transform: (PhotoMetadata) -> PhotoMetadata,
+    ) {
         val key = VaultApp.sessionKey ?: return
         val entity = db.photoDao().byId(itemId) ?: return
         val updated = transform(entity.decryptMetadata(key))
@@ -90,7 +106,10 @@ class VaultRepository private constructor(private val context: Context, private 
     }
 
     /** Renames an album (the new title is stored encrypted). */
-    suspend fun renameAlbum(id: Long, name: String) {
+    suspend fun renameAlbum(
+        id: Long,
+        name: String,
+    ) {
         val key = VaultApp.sessionKey ?: return
         db.albumDao().rename(id, encryptText(key, name.trim()))
     }
@@ -102,11 +121,16 @@ class VaultRepository private constructor(private val context: Context, private 
     }
 
     /** Adds [itemIds] to an album; items already in it are ignored. */
-    suspend fun addToAlbum(albumId: Long, itemIds: List<Long>) =
-        db.albumDao().addLinks(itemIds.map { AlbumItemEntity(albumId, it) })
+    suspend fun addToAlbum(
+        albumId: Long,
+        itemIds: List<Long>,
+    ) = db.albumDao().addLinks(itemIds.map { AlbumItemEntity(albumId, it) })
 
     /** Removes [itemIds] from an album without deleting them. */
-    suspend fun removeFromAlbum(albumId: Long, itemIds: List<Long>) = db.albumDao().removeLinks(albumId, itemIds)
+    suspend fun removeFromAlbum(
+        albumId: Long,
+        itemIds: List<Long>,
+    ) = db.albumDao().removeLinks(albumId, itemIds)
 
     // ---- Mapping helpers --------------------------------------------------------------------
 
@@ -119,10 +143,20 @@ class VaultRepository private constructor(private val context: Context, private 
     private fun PhotoEntity.toItem(key: SecretKey): VaultItem {
         val meta = decryptMetadata(key)
         return VaultItem(
-            id = id, hash = hash, mimeType = mimeType, takenAt = timestamp, sizeBytes = size,
-            durationMs = durationMs, isFavorite = favorite, trashedAt = deletedAt.takeIf { it > 0 },
-            name = meta.name, sourceFolder = meta.sourceFolder,
-            isHidden = hidden, width = width, height = height, caption = meta.caption,
+            id = id,
+            hash = hash,
+            mimeType = mimeType,
+            takenAt = timestamp,
+            sizeBytes = size,
+            durationMs = durationMs,
+            isFavorite = favorite,
+            trashedAt = deletedAt.takeIf { it > 0 },
+            name = meta.name,
+            sourceFolder = meta.sourceFolder,
+            isHidden = hidden,
+            width = width,
+            height = height,
+            caption = meta.caption,
         )
     }
 
@@ -138,22 +172,30 @@ class VaultRepository private constructor(private val context: Context, private 
         @Volatile private var instance: VaultRepository? = null
 
         /** Process-wide singleton so every screen observes the same Room invalidation tracker. */
-        fun get(context: Context): VaultRepository = instance ?: synchronized(this) {
-            instance ?: VaultRepository(context.applicationContext, VaultDatabase.get(context)).also { instance = it }
-        }
+        fun get(context: Context): VaultRepository =
+            instance ?: synchronized(this) {
+                instance ?: VaultRepository(context.applicationContext, VaultDatabase.get(context)).also { instance = it }
+            }
 
         /** Drops the singleton so the next [get] binds to a fresh database (after a wipe the old instance points at a closed one). */
         fun reset() = synchronized(this) { instance = null }
 
         /** Serialises and encrypts [meta] with [key] (used by the import worker as well). */
-        fun encryptMetadata(key: SecretKey, meta: PhotoMetadata): ByteArray =
-            KeyHierarchy.gcmEncrypt(key, PhotoMetadataCodec.encode(meta))
+        fun encryptMetadata(
+            key: SecretKey,
+            meta: PhotoMetadata,
+        ): ByteArray = KeyHierarchy.gcmEncrypt(key, PhotoMetadataCodec.encode(meta))
 
         /** Encrypts a short UTF-8 string (album titles). */
-        private fun encryptText(key: SecretKey, text: String) = KeyHierarchy.gcmEncrypt(key, text.toByteArray())
+        private fun encryptText(
+            key: SecretKey,
+            text: String,
+        ) = KeyHierarchy.gcmEncrypt(key, text.toByteArray())
 
         /** Inverse of [encryptText]; a bad blob decodes to an empty string. */
-        private fun decryptText(key: SecretKey, blob: ByteArray) =
-            runCatching { String(KeyHierarchy.gcmDecrypt(key, blob)) }.getOrDefault("")
+        private fun decryptText(
+            key: SecretKey,
+            blob: ByteArray,
+        ) = runCatching { String(KeyHierarchy.gcmDecrypt(key, blob)) }.getOrDefault("")
     }
 }

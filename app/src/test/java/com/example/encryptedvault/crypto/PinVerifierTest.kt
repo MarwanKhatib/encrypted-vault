@@ -37,7 +37,8 @@ class PinVerifierTest {
     }
 
     @Test fun newSaltsAreRandomAndSixteenBytes() {
-        val a = PinVerifier.newSalt(); val b = PinVerifier.newSalt()
+        val a = PinVerifier.newSalt()
+        val b = PinVerifier.newSalt()
         assertEquals(16, a.size)
         assertFalse(a.contentEquals(b))
     }

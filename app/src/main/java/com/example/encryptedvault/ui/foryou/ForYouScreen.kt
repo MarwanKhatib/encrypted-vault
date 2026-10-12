@@ -63,9 +63,12 @@ fun ForYouScreen(
                     items(onThisDay, key = { it.yearsAgo }) { group ->
                         val title = if (group.yearsAgo == 1) "1 year ago" else "${group.yearsAgo} years ago"
                         CoverCard(
-                            title, "${group.items.size} item${if (group.items.size == 1) "" else "s"}", group.items.first(),
+                            title,
+                            "${group.items.size} item${if (group.items.size == 1) "" else "s"}",
+                            group.items.first(),
                             { onOpenCollection(CollectionSource.Fixed(title, group.items.map { it.id })) },
-                            Modifier.width(220.dp), aspect = 0.8f,
+                            Modifier.width(220.dp),
+                            aspect = 0.8f,
                         )
                     }
                 }
@@ -79,7 +82,11 @@ fun ForYouScreen(
                     items(featured, key = { it.id }) { item ->
                         val bitmap by rememberThumbnail(item)
                         Box(
-                            Modifier.width(260.dp).aspectRatio(0.8f).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
+                            Modifier
+                                .width(260.dp)
+                                .aspectRatio(0.8f)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
                                 .clickable { onOpenViewer(featured.map { it.id }, featured.indexOf(item)) },
                         ) { bitmap?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) } }
                     }
@@ -101,4 +108,9 @@ fun ForYouScreen(
 /** Section title of the For You tab. */
 @Composable
 private fun Header(title: String) =
-    Text(title, Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 22.dp, bottom = 8.dp), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    Text(
+        title,
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 22.dp, bottom = 8.dp),
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.Bold,
+    )

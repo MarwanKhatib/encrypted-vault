@@ -16,13 +16,12 @@ import com.example.encryptedvault.data.PhotoMetadata
 import com.example.encryptedvault.data.VaultDatabase
 import com.example.encryptedvault.data.VaultRepository
 import com.example.encryptedvault.data.VaultStorage
-import kotlinx.coroutines.flow.first
-import java.util.UUID
 import com.example.encryptedvault.media.SourceInfo
 import com.example.encryptedvault.media.Thumbnails
-import com.example.encryptedvault.ui.settings.AppSettings
+import kotlinx.coroutines.flow.first
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.UUID
 import javax.crypto.SecretKey
 
 /**
@@ -32,8 +31,10 @@ import javax.crypto.SecretKey
  * so a killed worker can simply be re-run. A row is marked `complete` only after the content,
  * thumbnail and face crops are all committed (Gap 5).
  */
-class ImportWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
-
+class ImportWorker(
+    context: Context,
+    params: WorkerParameters,
+) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val key = VaultApp.sessionKey ?: return Result.retry() // vault locked; retry after unlock
         val dao = VaultDatabase.get(applicationContext).photoDao()
@@ -49,11 +50,21 @@ class ImportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             if (!source.exists()) continue
             val isStaged = source.path.startsWith(applicationContext.cacheDir.path)
             val hash = VaultFiles.sha256(source)
-            if (dao.findCompleteByHash(hash) != null) { if (isStaged) source.delete(); continue } // already vaulted
+            if (dao.findCompleteByHash(hash) != null) {
+                if (isStaged) source.delete()
+                continue
+            } // already vaulted
 
-            val mime = android.webkit.MimeTypeMap.getSingleton()
-                .getMimeTypeFromExtension(source.extension.lowercase()) ?: "application/octet-stream"
-            val info = SourceInfo(names.getOrNull(index).orEmpty(), folders.getOrNull(index)?.takeIf { it.isNotEmpty() }, takenAt.getOrNull(index) ?: source.lastModified())
+            val mime =
+                android.webkit.MimeTypeMap
+                    .getSingleton()
+                    .getMimeTypeFromExtension(source.extension.lowercase()) ?: "application/octet-stream"
+            val info =
+                SourceInfo(
+                    names.getOrNull(index).orEmpty(),
+                    folders.getOrNull(index)?.takeIf { it.isNotEmpty() },
+                    takenAt.getOrNull(index) ?: source.lastModified(),
+                )
             // One unreadable file must not abort the rest of the batch.
             runCatching { importOne(key, source, hash, mime, info) }
                 .onFailure { VaultStorage.deleteAll(applicationContext, hash) }
@@ -63,13 +74,26 @@ class ImportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
     }
 
     /** Encrypts one file and commits its database row; throws on any failure so the caller can clean up. */
-    private suspend fun importOne(key: SecretKey, source: File, hash: String, mime: String, info: SourceInfo) {
+    private suspend fun importOne(
+        key: SecretKey,
+        source: File,
+        hash: String,
+        mime: String,
+        info: SourceInfo,
+    ) {
         val dao = VaultDatabase.get(applicationContext).photoDao()
         val (width, height) = Thumbnails.dimensions(source, mime)
-        val pending = PhotoEntity(
-            hash = hash, mimeType = mime, timestamp = info.takenAt, status = "pending", size = source.length(), width = width, height = height,
-            durationMs = if (mime.startsWith("video/")) Thumbnails.videoDurationMs(source) else 0,
-        )
+        val pending =
+            PhotoEntity(
+                hash = hash,
+                mimeType = mime,
+                timestamp = info.takenAt,
+                status = "pending",
+                size = source.length(),
+                width = width,
+                height = height,
+                durationMs = if (mime.startsWith("video/")) Thumbnails.videoDurationMs(source) else 0,
+            )
         val id = dao.upsert(pending)
         try {
             source.inputStream().use { VaultFiles.encryptAtomic(key, it, VaultStorage.content(applicationContext, hash)) }
@@ -83,7 +107,12 @@ class ImportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
     }
 
     /** Encrypts a JPEG thumbnail of [source] next to the content file, so the grid never has to decrypt the full media. */
-    private fun writeThumbnail(key: SecretKey, source: File, mime: String, hash: String) {
+    private fun writeThumbnail(
+        key: SecretKey,
+        source: File,
+        mime: String,
+        hash: String,
+    ) {
         val jpeg = ByteArrayOutputStream().also { Thumbnails.generate(source, mime).compress(Bitmap.CompressFormat.JPEG, 82, it) }.toByteArray()
         VaultFiles.encryptAtomic(key, jpeg.inputStream(), VaultStorage.thumbnail(applicationContext, hash))
     }
@@ -95,12 +124,14 @@ class ImportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         const val KEY_TAKEN_AT = "taken_at"
 
         /** Builds the worker input for staged files. */
-        fun inputFor(files: List<com.example.encryptedvault.media.MediaTransfer.StagedFile>): Data = Data.Builder()
-            .putStringArray(KEY_PATHS, files.map { it.path }.toTypedArray())
-            .putStringArray(KEY_NAMES, files.map { it.info.name }.toTypedArray())
-            .putStringArray(KEY_FOLDERS, files.map { it.info.folder.orEmpty() }.toTypedArray())
-            .putLongArray(KEY_TAKEN_AT, files.map { it.info.takenAt }.toLongArray())
-            .build()
+        fun inputFor(files: List<com.example.encryptedvault.media.MediaTransfer.StagedFile>): Data =
+            Data
+                .Builder()
+                .putStringArray(KEY_PATHS, files.map { it.path }.toTypedArray())
+                .putStringArray(KEY_NAMES, files.map { it.info.name }.toTypedArray())
+                .putStringArray(KEY_FOLDERS, files.map { it.info.folder.orEmpty() }.toTypedArray())
+                .putLongArray(KEY_TAKEN_AT, files.map { it.info.takenAt }.toLongArray())
+                .build()
 
         /**
          * Splits [files] into batches whose worker input stays well under WorkManager's 10 KB Data limit. A fixed count is not
@@ -113,7 +144,11 @@ class ImportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             val batches = mutableListOf<MutableList<com.example.encryptedvault.media.MediaTransfer.StagedFile>>()
             var used = 0
             for (file in files) {
-                val cost = file.path.utf8Size() + file.info.name.utf8Size() + file.info.folder.orEmpty().utf8Size() + PER_FILE_OVERHEAD_BYTES
+                val cost =
+                    file.path.utf8Size() + file.info.name.utf8Size() +
+                        file.info.folder
+                            .orEmpty()
+                            .utf8Size() + PER_FILE_OVERHEAD_BYTES
                 if (batches.isEmpty() || used + cost > budgetBytes) {
                     batches.add(mutableListOf())
                     used = 0
@@ -128,7 +163,10 @@ class ImportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
          * Queues [files] as a chain of batches under one unique name, so they run one after another and a second selection
          * appends to the same chain. Returns the batch ids in order; empty when there is nothing to import.
          */
-        fun enqueueBatches(context: Context, files: List<com.example.encryptedvault.media.MediaTransfer.StagedFile>): List<UUID> {
+        fun enqueueBatches(
+            context: Context,
+            files: List<com.example.encryptedvault.media.MediaTransfer.StagedFile>,
+        ): List<UUID> {
             val requests = batchesOf(files).map { OneTimeWorkRequestBuilder<ImportWorker>().setInputData(inputFor(it)).build() }
             if (requests.isEmpty()) return emptyList()
             WorkManager.getInstance(context).beginUniqueWork(CHAIN_NAME, ExistingWorkPolicy.APPEND, requests).enqueue()
@@ -136,7 +174,10 @@ class ImportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         }
 
         /** Imports [staged] through this worker and suspends until it finishes; true when it succeeded. */
-        suspend fun importAndWait(context: Context, staged: com.example.encryptedvault.media.MediaTransfer.StagedFile): Boolean {
+        suspend fun importAndWait(
+            context: Context,
+            staged: com.example.encryptedvault.media.MediaTransfer.StagedFile,
+        ): Boolean {
             val request = OneTimeWorkRequestBuilder<ImportWorker>().setInputData(inputFor(listOf(staged))).build()
             val workManager = WorkManager.getInstance(context)
             workManager.enqueue(request)

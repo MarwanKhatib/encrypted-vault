@@ -13,10 +13,14 @@ class ForYouTest {
 
     @Test
     fun onThisDayGroupsPastYearsNearestFirst() {
-        val items = listOf(
-            testItem(1, LocalDate.of(2023, 6, 12)), testItem(2, LocalDate.of(2024, 6, 12)), testItem(3, LocalDate.of(2024, 6, 12)),
-            testItem(4, LocalDate.of(2024, 6, 13)), testItem(5, LocalDate.of(2025, 6, 12)),
-        )
+        val items =
+            listOf(
+                testItem(1, LocalDate.of(2023, 6, 12)),
+                testItem(2, LocalDate.of(2024, 6, 12)),
+                testItem(3, LocalDate.of(2024, 6, 12)),
+                testItem(4, LocalDate.of(2024, 6, 13)),
+                testItem(5, LocalDate.of(2025, 6, 12)),
+            )
         val groups = ForYou.onThisDay(items, today, utc)
         assertEquals(listOf(1, 2), groups.map { it.yearsAgo })
         assertEquals(listOf(2L, 3L), groups[0].items.map { it.id })

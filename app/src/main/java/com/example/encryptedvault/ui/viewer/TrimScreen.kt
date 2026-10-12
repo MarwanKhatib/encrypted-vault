@@ -54,7 +54,10 @@ import kotlinx.coroutines.withContext
  * [onDone] gets a message for the caller's snackbar; the caller closes the screen.
  */
 @Composable
-fun TrimScreen(item: VaultItem, onDone: (String?) -> Unit) {
+fun TrimScreen(
+    item: VaultItem,
+    onDone: (String?) -> Unit,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val duration = item.durationMs
@@ -64,9 +67,10 @@ fun TrimScreen(item: VaultItem, onDone: (String?) -> Unit) {
     var player by remember { mutableStateOf<ExoPlayer?>(null) }
 
     LaunchedEffect(item.hash) {
-        val ready = withContext(Dispatchers.IO) {
-            runCatching { VaultFiles.upgradeToStreaming(checkNotNull(VaultApp.sessionKey), VaultStorage.content(context, item.hash)) }.isSuccess
-        }
+        val ready =
+            withContext(Dispatchers.IO) {
+                runCatching { VaultFiles.upgradeToStreaming(checkNotNull(VaultApp.sessionKey), VaultStorage.content(context, item.hash)) }.isSuccess
+            }
         if (ready) player = buildVaultPlayer(context, item).apply { prepare() } else failed = true
     }
     DisposableEffect(Unit) { onDispose { player?.release() } }
@@ -75,7 +79,10 @@ fun TrimScreen(item: VaultItem, onDone: (String?) -> Unit) {
         saving = true
         scope.launch {
             val staged = stageTrim(context, item, range)
-            if (staged == null) { onDone("Couldn't trim this video."); return@launch }
+            if (staged == null) {
+                onDone("Couldn't trim this video.")
+                return@launch
+            }
             val imported = ImportWorker.importAndWait(context, staged)
             onDone(if (imported) "Saved a trimmed copy." else "Saving failed; the original is untouched.")
         }
@@ -94,20 +101,40 @@ fun TrimScreen(item: VaultItem, onDone: (String?) -> Unit) {
                     when {
                         failed -> Text("Couldn't open this video.")
                         active == null -> CircularProgressIndicator()
-                        else -> AndroidView(
-                            factory = { viewContext -> PlayerView(viewContext).apply { useController = true; this.player = active } },
-                            update = { it.player = active },
-                            modifier = Modifier.fillMaxSize(),
-                        )
+                        else ->
+                            AndroidView(
+                                factory = { viewContext ->
+                                    PlayerView(viewContext).apply {
+                                        useController = true
+                                        this.player = active
+                                    }
+                                },
+                                update = { it.player = active },
+                                modifier = Modifier.fillMaxSize(),
+                            )
                     }
                 }
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        "Start ${Formatters.duration(range.startMs)} · End ${Formatters.duration(range.endMs)} · Length ${Formatters.duration(range.endMs - range.startMs)}",
+                        "Start ${Formatters.duration(range.startMs)} · End ${Formatters.duration(range.endMs)} · Length ${Formatters.duration(
+                            range.endMs - range.startMs,
+                        )}",
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    TrimSlider("Trim start", range.startMs, duration, onChange = { range = range.withStart(it) }, onFinished = { player?.seekTo(range.startMs) })
-                    TrimSlider("Trim end", range.endMs, duration, onChange = { range = range.withEnd(it, duration) }, onFinished = { player?.seekTo(range.endMs) })
+                    TrimSlider(
+                        "Trim start",
+                        range.startMs,
+                        duration,
+                        onChange = { range = range.withStart(it) },
+                        onFinished = { player?.seekTo(range.startMs) },
+                    )
+                    TrimSlider(
+                        "Trim end",
+                        range.endMs,
+                        duration,
+                        onChange = { range = range.withEnd(it, duration) },
+                        onFinished = { player?.seekTo(range.endMs) },
+                    )
                 }
             }
         }
@@ -116,7 +143,13 @@ fun TrimScreen(item: VaultItem, onDone: (String?) -> Unit) {
 
 /** One trim handle; the label doubles as its spoken name. [onFinished] seeks the preview to where the handle was left. */
 @Composable
-private fun TrimSlider(label: String, valueMs: Long, durationMs: Long, onChange: (Long) -> Unit, onFinished: () -> Unit) {
+private fun TrimSlider(
+    label: String,
+    valueMs: Long,
+    durationMs: Long,
+    onChange: (Long) -> Unit,
+    onFinished: () -> Unit,
+) {
     Slider(
         value = valueMs.toFloat(),
         onValueChange = { onChange(it.toLong()) },

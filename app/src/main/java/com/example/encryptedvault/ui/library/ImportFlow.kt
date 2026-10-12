@@ -29,50 +29,72 @@ import kotlinx.coroutines.withContext
  * [onBusy] receives a progress message while working and null when finished.
  */
 @Composable
-fun rememberImportLauncher(settings: AppSettings, snackbar: SnackbarHostState, onBusy: (String?) -> Unit): () -> Unit {
+fun rememberImportLauncher(
+    settings: AppSettings,
+    snackbar: SnackbarHostState,
+    onBusy: (String?) -> Unit,
+): () -> Unit {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
-        SessionManager.suppressNextStopLock = false
-        scope.launch {
-            snackbar.showSnackbar(
-                if (result.resultCode == android.app.Activity.RESULT_OK) "Originals removed from this device. Also delete them in Google Photos and empty its trash."
-                else "Originals kept in your gallery."
-            )
-        }
-    }
-
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
-        SessionManager.suppressNextStopLock = false
-        if (uris.isEmpty()) return@rememberLauncherForActivityResult
-        scope.launch {
-            val notMedia = withContext(Dispatchers.IO) { uris.filterNot { MediaTransfer.isPhotoOrVideo(MediaTransfer.mimeOf(context, it)) } }
-            if (notMedia.isNotEmpty()) snackbar.showSnackbar("Skipped ${notMedia.size} file(s) that are not photos or videos")
-            val candidates = uris - notMedia.toSet()
-            val oversized = withContext(Dispatchers.IO) { candidates.filter { MediaTransfer.exceedsLimit(context, it) } }
-            if (oversized.isNotEmpty()) snackbar.showSnackbar("Skipped ${oversized.size} file(s) larger than 500 MB")
-            val picked = candidates - oversized.toSet()
-            if (picked.isEmpty()) return@launch
-            onBusy("Encrypting ${picked.size}…")
-            val staged = withContext(Dispatchers.IO) { picked.mapNotNull { MediaTransfer.stage(context, it) } }
-            val workManager = WorkManager.getInstance(context)
-            val batches = ImportWorker.enqueueBatches(context, staged)
-            val succeeded = batches.isNotEmpty() && batches.all { id ->
-                workManager.getWorkInfoByIdFlow(id).first { it != null && it.state.isFinished }?.state == WorkInfo.State.SUCCEEDED
+    val deleteLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+            SessionManager.suppressNextStopLock = false
+            scope.launch {
+                snackbar.showSnackbar(
+                    if (result.resultCode ==
+                        android.app.Activity.RESULT_OK
+                    ) {
+                        "Originals removed from this device. Also delete them in Google Photos and empty its trash."
+                    } else {
+                        "Originals kept in your gallery."
+                    },
+                )
             }
-            onBusy(null)
-
-            if (!succeeded) { snackbar.showSnackbar("Encryption failed; originals untouched."); return@launch }
-            if (!settings.offerDeleteOriginals) { snackbar.showSnackbar("Added ${staged.size} to the vault."); return@launch }
-
-            val deletable = withContext(Dispatchers.IO) { MediaTransfer.verifiedOriginalUris(context, picked) }
-            if (deletable.isEmpty()) { snackbar.showSnackbar("Encrypted. Originals can't be auto-removed; delete them in your gallery."); return@launch }
-            SessionManager.suppressNextStopLock = true
-            val sender = MediaStore.createDeleteRequest(context.contentResolver, deletable).intentSender
-            deleteLauncher.launch(IntentSenderRequest.Builder(sender).build())
         }
-    }
+
+    val picker =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
+            SessionManager.suppressNextStopLock = false
+            if (uris.isEmpty()) return@rememberLauncherForActivityResult
+            scope.launch {
+                val notMedia = withContext(Dispatchers.IO) { uris.filterNot { MediaTransfer.isPhotoOrVideo(MediaTransfer.mimeOf(context, it)) } }
+                if (notMedia.isNotEmpty()) snackbar.showSnackbar("Skipped ${notMedia.size} file(s) that are not photos or videos")
+                val candidates = uris - notMedia.toSet()
+                val oversized = withContext(Dispatchers.IO) { candidates.filter { MediaTransfer.exceedsLimit(context, it) } }
+                if (oversized.isNotEmpty()) snackbar.showSnackbar("Skipped ${oversized.size} file(s) larger than 500 MB")
+                val picked = candidates - oversized.toSet()
+                if (picked.isEmpty()) return@launch
+                onBusy("Encrypting ${picked.size}…")
+                val staged = withContext(Dispatchers.IO) { picked.mapNotNull { MediaTransfer.stage(context, it) } }
+                val workManager = WorkManager.getInstance(context)
+                val batches = ImportWorker.enqueueBatches(context, staged)
+                val succeeded =
+                    batches.isNotEmpty() &&
+                        batches.all { id ->
+                            workManager.getWorkInfoByIdFlow(id).first { it != null && it.state.isFinished }?.state == WorkInfo.State.SUCCEEDED
+                        }
+                onBusy(null)
+
+                if (!succeeded) {
+                    snackbar.showSnackbar("Encryption failed; originals untouched.")
+                    return@launch
+                }
+                if (!settings.offerDeleteOriginals) {
+                    snackbar.showSnackbar("Added ${staged.size} to the vault.")
+                    return@launch
+                }
+
+                val deletable = withContext(Dispatchers.IO) { MediaTransfer.verifiedOriginalUris(context, picked) }
+                if (deletable.isEmpty()) {
+                    snackbar.showSnackbar("Encrypted. Originals can't be auto-removed; delete them in your gallery.")
+                    return@launch
+                }
+                SessionManager.suppressNextStopLock = true
+                val sender = MediaStore.createDeleteRequest(context.contentResolver, deletable).intentSender
+                deleteLauncher.launch(IntentSenderRequest.Builder(sender).build())
+            }
+        }
 
     return {
         SessionManager.suppressNextStopLock = true

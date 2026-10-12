@@ -17,13 +17,22 @@ object VaultStorage {
     fun directory(context: Context): File = File(context.filesDir, "vault").apply { mkdirs() }
 
     /** Encrypted full-size media file of the item whose plaintext hash is [hash]. */
-    fun content(context: Context, hash: String) = File(directory(context), "$hash.enc")
+    fun content(
+        context: Context,
+        hash: String,
+    ) = File(directory(context), "$hash.enc")
 
     /** Encrypted JPEG thumbnail of the item whose plaintext hash is [hash]. */
-    fun thumbnail(context: Context, hash: String) = File(directory(context), "$hash.thumb.enc")
+    fun thumbnail(
+        context: Context,
+        hash: String,
+    ) = File(directory(context), "$hash.thumb.enc")
 
     /** Deletes every file belonging to [hash] (content and thumbnail). */
-    fun deleteAll(context: Context, hash: String) {
+    fun deleteAll(
+        context: Context,
+        hash: String,
+    ) {
         directory(context).listFiles { f -> f.name.startsWith("$hash.") }?.forEach { it.delete() }
     }
 

@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -23,7 +24,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.example.encryptedvault.backup.VaultBackup
 import com.example.encryptedvault.crypto.BackupCrypto
@@ -76,7 +76,11 @@ internal fun BackupRows(onMessage: (String) -> Unit) {
 }
 
 /** Writes the backup and returns the message to show. The passphrase is wiped afterwards. */
-private suspend fun exportTo(context: Context, uri: Uri, passphrase: CharArray): String {
+private suspend fun exportTo(
+    context: Context,
+    uri: Uri,
+    passphrase: CharArray,
+): String {
     try {
         val out = context.contentResolver.openOutputStream(uri) ?: return "Couldn't open the file for writing."
         return "Exported ${VaultBackup.export(context, passphrase, out)} item(s)."
@@ -90,7 +94,11 @@ private suspend fun exportTo(context: Context, uri: Uri, passphrase: CharArray):
 }
 
 /** Restores the backup and returns the message to show. The passphrase is wiped afterwards. */
-private suspend fun restoreFrom(context: Context, uri: Uri, passphrase: CharArray): String {
+private suspend fun restoreFrom(
+    context: Context,
+    uri: Uri,
+    passphrase: CharArray,
+): String {
     try {
         val input = context.contentResolver.openInputStream(uri) ?: return "Couldn't open the file."
         val report = input.use { VaultBackup.restore(context, passphrase, it) }
@@ -106,7 +114,12 @@ private suspend fun restoreFrom(context: Context, uri: Uri, passphrase: CharArra
 
 /** Asks for a passphrase. When [creating], it must be typed twice and meet the minimum length, and the user is warned it cannot be recovered. */
 @Composable
-private fun PassphraseDialog(title: String, creating: Boolean, onDismiss: () -> Unit, onSubmit: (CharArray) -> Unit) {
+private fun PassphraseDialog(
+    title: String,
+    creating: Boolean,
+    onDismiss: () -> Unit,
+    onSubmit: (CharArray) -> Unit,
+) {
     var first by remember { mutableStateOf("") }
     var second by remember { mutableStateOf("") }
     val tooShort = creating && first.length < BackupCrypto.MIN_PASSPHRASE_LENGTH

@@ -24,7 +24,10 @@ import kotlin.coroutines.resume
 private const val TRIM_DIR = "trim"
 
 /** A trim selection in milliseconds of the source video. Always at least [MIN_LENGTH_MS] long. */
-data class TrimRange(val startMs: Long, val endMs: Long) {
+data class TrimRange(
+    val startMs: Long,
+    val endMs: Long,
+) {
     init {
         require(startMs >= 0 && endMs - startMs >= MIN_LENGTH_MS) { "Trim must keep at least $MIN_LENGTH_MS ms" }
     }
@@ -33,7 +36,10 @@ data class TrimRange(val startMs: Long, val endMs: Long) {
     fun withStart(ms: Long) = TrimRange(ms.coerceIn(0, endMs - MIN_LENGTH_MS), endMs)
 
     /** Moves the end handle, keeping the minimum length and staying inside a [durationMs] video. */
-    fun withEnd(ms: Long, durationMs: Long) = TrimRange(startMs, ms.coerceIn(startMs + MIN_LENGTH_MS, durationMs))
+    fun withEnd(
+        ms: Long,
+        durationMs: Long,
+    ) = TrimRange(startMs, ms.coerceIn(startMs + MIN_LENGTH_MS, durationMs))
 
     /** True when the selection keeps the whole video, so there is nothing to save. */
     fun covers(durationMs: Long) = startMs == 0L && endMs == durationMs
@@ -58,7 +64,11 @@ fun trimmedName(name: String): String {
  * Decrypts [item] to a temporary plaintext file, exports [range] as MP4 and returns the staged result for the import worker.
  * The plaintext is always deleted; the original vaulted video is never modified.
  */
-suspend fun stageTrim(context: Context, item: VaultItem, range: TrimRange): MediaTransfer.StagedFile? {
+suspend fun stageTrim(
+    context: Context,
+    item: VaultItem,
+    range: TrimRange,
+): MediaTransfer.StagedFile? {
     val key = VaultApp.sessionKey ?: return null
     val source = File(File(context.cacheDir, TRIM_DIR).apply { mkdirs() }, "${System.nanoTime()}.${item.name.substringAfterLast('.', "mp4")}")
     try {
@@ -81,25 +91,47 @@ suspend fun stageTrim(context: Context, item: VaultItem, range: TrimRange): Medi
 }
 
 /** Writes the [range] of [source] to [output] with Media3 Transformer. Transformer must run on a Looper thread, so this hops to main. */
-private suspend fun exportTrim(context: Context, source: File, range: TrimRange, output: File): Boolean = withContext(Dispatchers.Main) {
-    suspendCancellableCoroutine { continuation ->
-        val transformer = Transformer.Builder(context).build()
-        val mainHandler = Handler(Looper.getMainLooper())
-        transformer.addListener(object : Transformer.Listener {
-            override fun onCompleted(composition: Composition, exportResult: ExportResult) {
-                if (continuation.isActive) continuation.resume(true)
-            }
+private suspend fun exportTrim(
+    context: Context,
+    source: File,
+    range: TrimRange,
+    output: File,
+): Boolean =
+    withContext(Dispatchers.Main) {
+        suspendCancellableCoroutine { continuation ->
+            val transformer = Transformer.Builder(context).build()
+            val mainHandler = Handler(Looper.getMainLooper())
+            transformer.addListener(
+                object : Transformer.Listener {
+                    override fun onCompleted(
+                        composition: Composition,
+                        exportResult: ExportResult,
+                    ) {
+                        if (continuation.isActive) continuation.resume(true)
+                    }
 
-            override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {
-                if (continuation.isActive) continuation.resume(false)
-            }
-        })
-        continuation.invokeOnCancellation { mainHandler.post { transformer.cancel() } }
-        val clip = MediaItem.ClippingConfiguration.Builder()
-            .setStartPositionMs(range.startMs)
-            .setEndPositionMs(range.endMs)
-            .build()
-        val mediaItem = MediaItem.Builder().setUri(Uri.fromFile(source)).setClippingConfiguration(clip).build()
-        transformer.start(EditedMediaItem.Builder(mediaItem).build(), output.path)
+                    override fun onError(
+                        composition: Composition,
+                        exportResult: ExportResult,
+                        exportException: ExportException,
+                    ) {
+                        if (continuation.isActive) continuation.resume(false)
+                    }
+                },
+            )
+            continuation.invokeOnCancellation { mainHandler.post { transformer.cancel() } }
+            val clip =
+                MediaItem.ClippingConfiguration
+                    .Builder()
+                    .setStartPositionMs(range.startMs)
+                    .setEndPositionMs(range.endMs)
+                    .build()
+            val mediaItem =
+                MediaItem
+                    .Builder()
+                    .setUri(Uri.fromFile(source))
+                    .setClippingConfiguration(clip)
+                    .build()
+            transformer.start(EditedMediaItem.Builder(mediaItem).build(), output.path)
+        }
     }
-}

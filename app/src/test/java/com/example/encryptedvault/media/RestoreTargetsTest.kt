@@ -4,7 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class RestoreTargetsTest {
-
     @Test
     fun cameraPhotoReturnsToItsFolder() =
         assertEquals(RestoreTarget(RestoreCollection.IMAGES, "DCIM/Camera/"), RestoreTargets.resolve(isVideo = false, sourceFolder = "DCIM/Camera"))
@@ -14,8 +13,7 @@ class RestoreTargetsTest {
         assertEquals(RestoreTarget(RestoreCollection.IMAGES, "Pictures/Screenshots/"), RestoreTargets.resolve(false, "Pictures/Screenshots/"))
 
     @Test
-    fun videoInCameraGoesToVideoCollection() =
-        assertEquals(RestoreTarget(RestoreCollection.VIDEO, "DCIM/Camera/"), RestoreTargets.resolve(true, "DCIM/Camera"))
+    fun videoInCameraGoesToVideoCollection() = assertEquals(RestoreTarget(RestoreCollection.VIDEO, "DCIM/Camera/"), RestoreTargets.resolve(true, "DCIM/Camera"))
 
     @Test
     fun videoCannotGoUnderPictures_soItIsKeptUnderMoviesRestored() =
@@ -29,7 +27,10 @@ class RestoreTargetsTest {
 
     @Test
     fun appPrivateOrUnknownRootsFallBackButKeepTheFolderName() =
-        assertEquals(RestoreTarget(RestoreCollection.IMAGES, "Pictures/Restored/Android/media/WhatsApp/"), RestoreTargets.resolve(false, "Android/media/WhatsApp"))
+        assertEquals(
+            RestoreTarget(RestoreCollection.IMAGES, "Pictures/Restored/Android/media/WhatsApp/"),
+            RestoreTargets.resolve(false, "Android/media/WhatsApp"),
+        )
 
     @Test
     fun missingFolderUsesDefaultRestoredFolder() {
@@ -38,6 +39,5 @@ class RestoreTargetsTest {
     }
 
     @Test
-    fun rootMatchingIsCaseInsensitive() =
-        assertEquals(RestoreTarget(RestoreCollection.IMAGES, "dcim/Camera/"), RestoreTargets.resolve(false, "dcim/Camera"))
+    fun rootMatchingIsCaseInsensitive() = assertEquals(RestoreTarget(RestoreCollection.IMAGES, "dcim/Camera/"), RestoreTargets.resolve(false, "dcim/Camera"))
 }

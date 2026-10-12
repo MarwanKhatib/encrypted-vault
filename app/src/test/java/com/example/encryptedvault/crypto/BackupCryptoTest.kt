@@ -15,14 +15,19 @@ class BackupCryptoTest {
     private val fullChunkRecord = 1 + 4 + (1 shl 20) + 16
     private val headerBytes = 4 + 1 + 16 + 12 + 4
 
-    private fun encrypt(data: ByteArray, passphrase: CharArray = pass): ByteArray {
+    private fun encrypt(
+        data: ByteArray,
+        passphrase: CharArray = pass,
+    ): ByteArray {
         val out = ByteArrayOutputStream()
         BackupCrypto.encrypting(out, passphrase).use { it.write(data) }
         return out.toByteArray()
     }
 
-    private fun decrypt(bytes: ByteArray, passphrase: CharArray = pass): ByteArray =
-        BackupCrypto.decrypting(ByteArrayInputStream(bytes), passphrase).use { it.readBytes() }
+    private fun decrypt(
+        bytes: ByteArray,
+        passphrase: CharArray = pass,
+    ): ByteArray = BackupCrypto.decrypting(ByteArrayInputStream(bytes), passphrase).use { it.readBytes() }
 
     private fun payload(size: Int) = ByteArray(size).also { Random(7).nextBytes(it) }
 
