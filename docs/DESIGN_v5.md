@@ -291,6 +291,7 @@ v1 listed "unit tests," "integration tests," "security tests" as headers with ex
 - [ ] Put phone in split-screen with vault open to a photo → verify auto-lock fires (Gap 6)
 - [ ] Visual check of the cyber theme on a real phone in dark and light: cyan actions readable, monospace labels legible, no clipped titles at 1.3× font scale (ADR-011)
 - [ ] Backup round trip: export, delete one trashed item, restore; the item must stay in Recently Deleted with its original trash date (format v2)
+- [ ] Metadata cache: lock, unlock, then check captions and albums still show; add a caption, then confirm the Library updates without a restart (performance pass)
 - [ ] Scroll the Library fast with 200+ photos → verify no stalls (thumbnail decrypt capped at three; ADR-011)
 - [ ] Set Settings → Privacy → Lock after idle to 1 min, leave the vault open without touching it → verify lock screen appears (ADR-010); then touch every ~30 s and verify it does not lock
 - [ ] Press recent-apps button with a photo open → verify thumbnail is blank/secured (Gap 6/v3-Gap5)
