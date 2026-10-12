@@ -57,3 +57,10 @@ complexity:
     threshold: 15
     ignoreAnnotated:
       - 'Composable'
+
+# Documentation: every public class and function has a KDoc comment.
+comments:
+  UndocumentedPublicClass:
+    active: true
+  UndocumentedPublicFunction:
+    active: true

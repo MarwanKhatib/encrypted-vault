@@ -104,6 +104,7 @@ data class CropBox(
         return intArrayOf(l, t, r - l, b - t)
     }
 
+    /** Clamps a side length to the minimum frame size and to the space left in its direction. */
     private fun clampSide(
         value: Float,
         max: Float,
@@ -134,6 +135,7 @@ data class Edit(
     /** Adds [by] degrees clockwise, normalised to 0..359. */
     fun rotated(by: Int) = copy(rotation = ((rotation + by) % 360 + 360) % 360, crop = CropBox())
 
+    /** Mirrors the image. Resets the crop, because the crop is in oriented-image coordinates. */
     fun flipped() = copy(flipHorizontal = !flipHorizontal, crop = CropBox())
 
     /** Selects [preset]; a ratio preset centres the largest frame of that shape on an image of [imageAspect]. */

@@ -71,6 +71,7 @@ object BackupCrypto {
         return DecryptingStream(data, deriveKey(passphrase, salt, iterations), baseNonce)
     }
 
+    /** Derives the AES-256 key from the passphrase with PBKDF2-HMAC-SHA256. */
     private fun deriveKey(
         passphrase: CharArray,
         salt: ByteArray,
@@ -86,6 +87,7 @@ object BackupCrypto {
         return SecretKeySpec(bytes, "AES").also { bytes.fill(0) }
     }
 
+    /** Derives the nonce of chunk [index] by XOR-ing its counter into the base nonce. */
     private fun nonceFor(
         base: ByteArray,
         index: Long,
@@ -99,6 +101,7 @@ object BackupCrypto {
         return nonce
     }
 
+    /** Associated data of chunk [index]: its index and whether it is the final chunk. */
     private fun aad(
         index: Long,
         last: Boolean,
@@ -109,6 +112,7 @@ object BackupCrypto {
             .put(if (last) 1 else 0)
             .array()
 
+    /** Builds an AES-GCM cipher for one chunk of the given direction. */
     private fun cipher(
         mode: Int,
         key: SecretKeySpec,
@@ -121,6 +125,7 @@ object BackupCrypto {
             updateAAD(aad(index, last))
         }
 
+    /** Encrypting side of the stream: buffers plaintext and seals it in chunks of at most CHUNK_BYTES. */
     private class EncryptingStream(
         private val out: DataOutputStream,
         private val key: SecretKeySpec,
@@ -158,6 +163,7 @@ object BackupCrypto {
             out.close()
         }
 
+        /** Seals the buffered plaintext as one chunk and writes it out. */
         private fun sealChunk(last: Boolean) {
             val sealed = cipher(Cipher.ENCRYPT_MODE, key, baseNonce, index, last).doFinal(buffer.toByteArray())
             out.writeByte(if (last) 1 else 0)
@@ -168,6 +174,7 @@ object BackupCrypto {
         }
     }
 
+    /** Decrypting side of the stream: opens one chunk at a time and hands out its plaintext. */
     private class DecryptingStream(
         private val input: DataInputStream,
         private val key: SecretKeySpec,
@@ -196,6 +203,7 @@ object BackupCrypto {
             return take
         }
 
+        /** Makes sure there is plaintext to read, opening the next chunk when needed; false at the end of the stream. */
         private fun fill(): Boolean {
             while (position >= chunk.size) {
                 if (finished) return false
@@ -204,6 +212,7 @@ object BackupCrypto {
             return true
         }
 
+        /** Opens the next chunk: reads its flag and body, decrypts it and checks the end of the stream after the last one. */
         private fun openChunk() {
             val last = readFinalFlag()
             chunk = decryptChunk(readSealedChunk(), last)

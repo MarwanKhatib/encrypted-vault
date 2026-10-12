@@ -98,6 +98,7 @@ object VaultBackup {
         return RestoreReport(imported, skipped, failed)
     }
 
+    /** Maps a vault item to the record that is written to the backup, with its album titles. */
     private fun VaultItem.toRecord(albums: List<String>) =
         BackupRecord(
             hash = hash,
@@ -160,6 +161,7 @@ object VaultBackup {
         record.albums.forEach { title -> repository.addToAlbum(albumIdFor(repository, title), listOf(id)) }
     }
 
+    /** Finds the id of the album titled [title], creating it when it does not exist yet. */
     private suspend fun albumIdFor(
         repository: VaultRepository,
         title: String,

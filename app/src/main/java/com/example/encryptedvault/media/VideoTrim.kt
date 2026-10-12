@@ -52,6 +52,7 @@ data class TrimRange(
         /** Whether a video of [durationMs] is long enough to trim at all. */
         fun trimmable(durationMs: Long) = durationMs >= MIN_LENGTH_MS
 
+        /** The whole video as one selection, from the start to [durationMs]. */
         fun whole(durationMs: Long) = TrimRange(0, durationMs)
     }
 }

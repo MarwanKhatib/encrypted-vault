@@ -36,11 +36,13 @@ object BackupRecords {
     const val MAX_ALBUMS_PER_ITEM = 4096
     private const val COPY_BUFFER_BYTES = 64 * 1024
 
+    /** Writes a record count (a 4-byte integer). */
     fun writeCount(
         out: DataOutputStream,
         count: Int,
     ) = out.writeInt(count)
 
+    /** Reads a record count, rejecting negative values and anything above [max] so a damaged file cannot request huge allocations. */
     fun readCount(
         input: DataInputStream,
         max: Int = Int.MAX_VALUE,
@@ -50,6 +52,7 @@ object BackupRecords {
         return count
     }
 
+    /** Writes one item record: its clear fields, its metadata and its album titles. The content bytes are written by the caller. */
     fun write(
         out: DataOutputStream,
         record: BackupRecord,
@@ -71,6 +74,7 @@ object BackupRecords {
         record.albums.forEach { out.writeText(it) }
     }
 
+    /** Reads one item record written by [write]. The content bytes that follow it are read by the caller. */
     fun read(input: DataInputStream): BackupRecord =
         BackupRecord(
             hash = input.readText(),
@@ -105,12 +109,14 @@ object BackupRecords {
         }
     }
 
+    /** Writes a string as a 4-byte length followed by its UTF-8 bytes. */
     private fun DataOutputStream.writeText(text: String) {
         val bytes = text.toByteArray(Charsets.UTF_8)
         writeInt(bytes.size)
         write(bytes)
     }
 
+    /** Reads a string written by writeText; the length is bounded by MAX_TEXT_BYTES. */
     private fun DataInputStream.readText(): String {
         val bytes = ByteArray(readCount(this, MAX_TEXT_BYTES))
         readFully(bytes)

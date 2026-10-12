@@ -75,6 +75,7 @@ fun TrimScreen(
     }
     DisposableEffect(Unit) { onDispose { player?.release() } }
 
+    /** Exports the selected range and imports the trimmed copy; reports the outcome through [onDone]. */
     fun save() {
         saving = true
         scope.launch {

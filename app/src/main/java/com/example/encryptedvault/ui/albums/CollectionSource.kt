@@ -8,7 +8,7 @@ sealed interface CollectionSource {
     /** Every item in the Library (the "Recents" album). */
     data object Recents : CollectionSource
 
-    // Media types
+    /** Every video in the Library. */
     data object Videos : CollectionSource
 
     /** Items taken from a Screenshots folder or named like a screenshot. */
@@ -23,7 +23,7 @@ sealed interface CollectionSource {
     /** Animated GIFs. */
     data object Animated : CollectionSource
 
-    // Utilities
+    /** Items the user marked as favourite. */
     data object Favorites : CollectionSource
 
     /** Copies saved by the photo editor (their name ends in `(edited).jpg`). */

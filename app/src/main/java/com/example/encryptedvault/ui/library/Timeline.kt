@@ -173,6 +173,7 @@ object Timeline {
         zone: ZoneId = ZoneId.systemDefault(),
     ): YearMonth = YearMonth.from(dayOf(item, zone))
 
+    /** Groups [items] by the key returned by [key], keeping the input order inside each group. */
     private fun <K> group(
         items: List<VaultItem>,
         keyOf: (VaultItem) -> K,

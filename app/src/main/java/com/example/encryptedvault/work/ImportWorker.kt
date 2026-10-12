@@ -212,6 +212,7 @@ class ImportWorker(
             return info?.state == WorkInfo.State.SUCCEEDED
         }
 
+        /** UTF-8 length of this string in bytes, used to budget WorkManager input. */
         private fun String.utf8Size() = toByteArray(Charsets.UTF_8).size
 
         /** WorkManager rejects input over 10 KB; keep headroom for the keys and the encoding overhead. */
