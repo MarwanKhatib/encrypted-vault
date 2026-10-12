@@ -36,8 +36,8 @@ Pure logic used by the screens (and covered by unit tests): `Timeline` (grouping
 - **Metadata decrypt cache:** `VaultRepository` keeps decrypted metadata per item id and reuses it while the encrypted blob is unchanged. Every database emission used to decrypt every item; now only changed items are decrypted. The cache is dropped when the vault locks (plaintext must not outlive the session) and pruned to the rows that still exist.
 - **Library selection:** `LibraryFeed.visible` (filter, time range, order) and `LibraryFeed.inEvent` (id-set lookup, not `List.contains` on whole items) are computed once per input change through `remember`, not on every recomposition. Year and event groups are remembered too.
 - **Search:** the whitespace regex is compiled once (`SearchMatcher.WHITESPACE`), not per item per keystroke.
-- **Thumbnails:** at most three decrypts at once (`ThumbnailLoader`).
-- Not measured on a device yet; these are algorithmic fixes, checked by unit tests for behaviour (not for speed).
+- **Thumbnails:** at most three decrypts at once (`ThumbnailLoader`), decoded as RGB_565 (half the memory of ARGB_8888; JPEG has no alpha). Grid tiles format their label once and keep no animation state unless selection is on.
+- **Measured (emulator, software GPU, 300 items, 25 swipes):** about 48–50% janky frames, median 46–48 ms, before and after these changes. Idle frames are clean (no redraw), and a second pass over cached thumbnails is no better, so thumbnail decoding is not the cause. The remaining cost is per-frame drawing, which this emulator cannot show accurately. Real-device timing is still needed.
 
 ## Files on disk (`files/vault/`, names are the plaintext SHA-256)
 

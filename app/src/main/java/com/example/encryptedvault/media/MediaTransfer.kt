@@ -248,13 +248,14 @@ object MediaTransfer {
         }.getOrNull()
     }
 
-    /** Decrypts a small encrypted JPEG (thumbnail or face crop). */
+    /** Decodes an encrypted JPEG thumbnail as RGB_565: JPEG has no alpha, and half the memory keeps more thumbnails in the grid cache. */
     fun loadEncryptedJpeg(
         key: SecretKey,
         file: File,
     ): Bitmap? =
         runCatching {
-            VaultFiles.decryptStream(key, file).use { BitmapFactory.decodeStream(it) }
+            val options = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.RGB_565 }
+            VaultFiles.decryptStream(key, file).use { BitmapFactory.decodeStream(it, null, options) }
         }.getOrNull()
 
     /** Removes temporary plaintext created for sharing/playback. [olderThanMs] = 0 wipes everything. */

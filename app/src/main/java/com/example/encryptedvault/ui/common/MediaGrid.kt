@@ -238,14 +238,23 @@ fun MediaTile(
     onLongClick: () -> Unit,
 ) {
     val bitmap by rememberThumbnail(item)
-    val scale by androidx.compose.animation.core.animateFloatAsState(
-        if (selected) 0.88f else 1f,
-        androidx.compose.animation.core.spring(
-            androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
-            androidx.compose.animation.core.Spring.StiffnessMediumLow,
-        ),
-        label = "tile-scale",
-    )
+    // The label is formatted once per item, not on every scroll recomposition.
+    val label = remember(item) { describe(item) }
+    // Tiles animate only when selection changes; idle tiles keep no animation state.
+    val scale =
+        if (selectionMode) {
+            androidx.compose.animation.core
+                .animateFloatAsState(
+                    if (selected) 0.88f else 1f,
+                    androidx.compose.animation.core.spring(
+                        androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                        androidx.compose.animation.core.Spring.StiffnessMediumLow,
+                    ),
+                    label = "tile-scale",
+                ).value
+        } else {
+            1f
+        }
     Box(
         Modifier
             .aspectRatio(1f)
@@ -255,7 +264,7 @@ fun MediaTile(
             }.background(MaterialTheme.colorScheme.surfaceVariant)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .semantics(mergeDescendants = true) {
-                contentDescription = describe(item)
+                contentDescription = label
                 if (selectionMode) this.selected = selected
             },
     ) {
