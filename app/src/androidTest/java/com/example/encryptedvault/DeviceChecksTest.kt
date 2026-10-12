@@ -107,19 +107,19 @@ class DeviceChecksTest {
     }
 
     /**
-     * Needs a real HEIC at cacheDir/sample.heic. The SDK has no HEIF encoder, so the sample has to come from a real phone.
+     * Needs a real HEIC at filesDir/sample.heic. The SDK has no HEIF encoder, so the sample has to come from a real phone.
      * Without it the test is skipped and reported as skipped, not passed.
      */
     @Test fun heicPhotoGetsAThumbnail() {
-        val heic = File(context.cacheDir, "sample.heic")
-        assumeTrue("no HEIC sample at cacheDir/sample.heic: this check is NOT run", heic.exists())
+        val heic = File(context.filesDir, "sample.heic")
+        assumeTrue("no HEIC sample at filesDir/sample.heic: this check is NOT run", heic.exists())
         val thumbnail = Thumbnails.decodeUpright(heic, "image/heic", 256)
         assertNotNull("HEIC decodes through ImageDecoder", thumbnail)
         assertTrue("thumbnail is no larger than the edge limit", maxOf(thumbnail!!.width, thumbnail.height) <= 256)
     }
-    /** Needs a real MP4 at the app cache path cacheDir/sample.mp4. `scripts/device-checks.sh` copies one there with run-as. */
+    /** Needs a real MP4 at the app files path filesDir/sample.mp4. `scripts/device-checks.sh` copies one there with run-as. */
     @Test fun mp4VideoGetsADurationAndAFrame() {
-        val video = File(context.cacheDir, "sample.mp4")
+        val video = File(context.filesDir, "sample.mp4")
         assertTrue("sample.mp4 must be in the app cache (see docs/DESIGN_v5.md, device checks)", video.exists())
         assertTrue("duration is read", Thumbnails.videoDurationMs(video) > 0)
         assertTrue("a frame is extracted", Thumbnails.videoFrames(video, 1, 256).isNotEmpty())

@@ -12,6 +12,8 @@
 set -u
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
+export JAVA_HOME="${JAVA_HOME:-$HOME/tools/jdk17}"
+export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
 ADB="${ADB:-$HOME/Android/Sdk/platform-tools/adb}"
 PKG=com.example.encryptedvault
 TEST_PKG=$PKG.test
@@ -42,15 +44,16 @@ copy_samples() {
     var="${pair%%:*}"; name="${pair##*:}"; src="${!var:-}"
     [ -n "$src" ] || continue
     "$ADB" push "$src" "/data/local/tmp/$name" >/dev/null
-    "$ADB" shell run-as "$PKG" cp "/data/local/tmp/$name" "cache/$name"
+    "$ADB" shell run-as "$PKG" cp "/data/local/tmp/$name" "files/$name"
   done
 }
 
 unit_checks() {
-  say "instrumented checks (DeviceChecksTest, DatabaseMigrationTest, KeyHierarchyTest, PanicWipeTest, VaultDataSourceTest)"
-  (cd "$REPO" && ./gradlew connectedDebugAndroidTest --console=plain) > "$OUT/connected.log" 2>&1
-  grep -E "BUILD|FAILED" "$OUT/connected.log" | tail -3
-  echo "  full log: $OUT/connected.log"
+  # Runs through am instrument, not Gradle: connectedDebugAndroidTest reinstalls the app and clears the sample files.
+  say "instrumented checks, all classes on the device (samples stay in the app cache)"
+  "$ADB" shell am instrument -w -r "$RUNNER" > "$OUT/unit.txt" 2>&1
+  grep -E "OK \(|FAILURES|Tests run|INSTRUMENTATION_CODE" "$OUT/unit.txt" | tail -5
+  echo "  full log: $OUT/unit.txt"
 }
 
 drill() {
@@ -81,6 +84,21 @@ drill() {
   grep -E "OK \(|FAILURES|stack=" "$OUT/drill-phase2.txt" | head -5
 }
 
+copy_formats() {
+  # Pushes every file of $SAMPLES_DIR into the app cache as cacheDir/samples/.
+  [ -d "${SAMPLES_DIR:-}" ] || { echo "set SAMPLES_DIR to a folder of sample files"; return 1; }
+  "$ADB" push "$SAMPLES_DIR" /data/local/tmp/samples >/dev/null
+  "$ADB" shell run-as "$PKG" rm -rf files/samples
+  "$ADB" shell run-as "$PKG" cp -r /data/local/tmp/samples files/samples
+}
+
+formats() {
+  say "import formats (ImportFormatsTest)"
+  "$ADB" shell am instrument -w -r -e class "$PKG.ImportFormatsTest" "$RUNNER" > "$OUT/formats.txt" 2>&1
+  grep -E "OK \(|FAILURES|stack=|Tests run" "$OUT/formats.txt" | head -20
+  echo "  full log: $OUT/formats.txt"
+}
+
 flows() {
   say "trim and backup flows (TrimAndBackupFlowTest)"
   "$ADB" shell am instrument -w -r -e class "$PKG.TrimAndBackupFlowTest" "$RUNNER" > "$OUT/flows.txt" 2>&1
@@ -105,10 +123,11 @@ recents() {
 }
 
 case "${1:-}" in
-  unit) wait_for_boot && install_debug && copy_samples && unit_checks ;;
+  unit) wait_for_boot && install_debug && copy_samples && { [ -z "${SAMPLES_DIR:-}" ] || copy_formats; } && unit_checks ;;
   drill-kill) wait_for_boot && install_debug && copy_samples && drill kill ;;
   drill-reboot) wait_for_boot && install_debug && copy_samples && drill reboot ;;
   recents) wait_for_boot && recents ;;
   flows) wait_for_boot && install_debug && copy_samples && flows ;;
+  formats) wait_for_boot && install_debug && copy_formats && formats ;;
   *) sed -n '2,11p' "$0"; exit 2 ;;
 esac

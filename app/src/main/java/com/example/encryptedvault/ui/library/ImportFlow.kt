@@ -47,9 +47,12 @@ fun rememberImportLauncher(settings: AppSettings, snackbar: SnackbarHostState, o
         SessionManager.suppressNextStopLock = false
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
         scope.launch {
-            val oversized = withContext(Dispatchers.IO) { uris.filter { MediaTransfer.exceedsLimit(context, it) } }
+            val notMedia = withContext(Dispatchers.IO) { uris.filterNot { MediaTransfer.isPhotoOrVideo(MediaTransfer.mimeOf(context, it)) } }
+            if (notMedia.isNotEmpty()) snackbar.showSnackbar("Skipped ${notMedia.size} file(s) that are not photos or videos")
+            val candidates = uris - notMedia.toSet()
+            val oversized = withContext(Dispatchers.IO) { candidates.filter { MediaTransfer.exceedsLimit(context, it) } }
             if (oversized.isNotEmpty()) snackbar.showSnackbar("Skipped ${oversized.size} file(s) larger than 500 MB")
-            val picked = uris - oversized.toSet()
+            val picked = candidates - oversized.toSet()
             if (picked.isEmpty()) return@launch
             onBusy("Encrypting ${picked.size}…")
             val staged = withContext(Dispatchers.IO) { picked.mapNotNull { MediaTransfer.stage(context, it) } }

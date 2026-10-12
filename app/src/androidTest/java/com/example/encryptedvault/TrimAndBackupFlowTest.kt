@@ -32,7 +32,7 @@ import java.io.IOException
 
 /**
  * End-to-end trim and backup on a device, without the file picker: real import, real Transformer export, real backup file.
- * Needs cacheDir/sample.mp4 for the trim test (scripts/device-checks.sh copies it in).
+ * Needs filesDir/sample.mp4 for the trim test (scripts/device-checks.sh copies it in).
  */
 @RunWith(AndroidJUnit4::class)
 class TrimAndBackupFlowTest {
@@ -73,8 +73,8 @@ class TrimAndBackupFlowTest {
     private fun items() = runBlocking { VaultRepository.get(context).items.first() }
 
     @Test fun trimmingAVideoSavesANewShorterCopy() {
-        val sample = File(context.cacheDir, "sample.mp4")
-        assumeTrue("needs cacheDir/sample.mp4 (scripts/device-checks.sh copies it)", sample.exists())
+        val sample = File(context.filesDir, "sample.mp4")
+        assumeTrue("needs filesDir/sample.mp4 (scripts/device-checks.sh copies it)", sample.exists())
         assertTrue("import the video", runBlocking { ImportWorker.importAndWait(context, stage(sample, "clip.mp4")) })
         val original = items().single()
 

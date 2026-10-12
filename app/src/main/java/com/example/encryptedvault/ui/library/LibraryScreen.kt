@@ -25,12 +25,22 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.layout.widthIn
+import com.example.encryptedvault.ui.common.OverflowMenuHeading
+import com.example.encryptedvault.ui.common.OverflowMenuItem
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -71,7 +81,9 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 
 /** Which media types the Library shows (the "Filter" section of the ⋯ menu). */
-private enum class LibraryFilter(val label: String) { ALL("All Items"), FAVORITES("Favorites"), PHOTOS("Photos"), VIDEOS("Videos") }
+private enum class LibraryFilter(val label: String, val icon: ImageVector) {
+    ALL("All items", Icons.Filled.PhotoLibrary), FAVORITES("Favorites", Icons.Filled.Favorite), PHOTOS("Photos", Icons.Filled.Image), VIDEOS("Videos", Icons.Filled.Videocam),
+}
 
 /**
  * The Library tab, modelled on iOS Photos: Years / Months / Days / All, newest at the bottom,
@@ -156,31 +168,39 @@ fun LibraryScreen(
                     TextButton(onClick = { selectionMode = true }) { Text("Select", fontWeight = FontWeight.SemiBold) }
                     Box {
                         IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, "More") }
-                        DropdownMenu(menuOpen, { menuOpen = false }) {
+                        DropdownMenu(
+                            menuOpen, { menuOpen = false },
+                            modifier = Modifier.widthIn(min = 240.dp),
+                        ) {
+                            OverflowMenuHeading("Show")
                             LibraryFilter.entries.forEach { option ->
-                                DropdownMenuItem(
-                                    text = { Text(option.label) },
-                                    leadingIcon = { if (filter == option) Icon(Icons.Filled.Check, null) },
-                                    onClick = { menuOpen = false; filter = option },
-                                )
+                                OverflowMenuItem(option.label, option.icon, selected = filter == option) { menuOpen = false; filter = option }
                             }
-                            HorizontalDivider()
-                            DropdownMenuItem(text = { Text("Time range…") }, onClick = { menuOpen = false; rangeMenuOpen = true })
-                            DropdownMenuItem(
-                                text = { Text(if (newestAtBottom) "Newest at top" else "Newest at bottom") },
-                                onClick = { menuOpen = false; settings.putNewestAtBottom(!newestAtBottom) },
-                            )
-                            HorizontalDivider()
-                            DropdownMenuItem(text = { Text("Settings") }, leadingIcon = { Icon(Icons.Filled.Settings, null) }, onClick = { menuOpen = false; onOpenSettings() })
-                            DropdownMenuItem(text = { Text("Lock now") }, leadingIcon = { Icon(Icons.Filled.Lock, null) }, onClick = { menuOpen = false; onLock() })
+                            HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                            OverflowMenuHeading("Time and order")
+                            OverflowMenuItem(
+                                "Time range", Icons.Filled.DateRange,
+                                trailing = rangePreset.label.takeIf { rangePreset != RangePreset.ANY },
+                            ) { menuOpen = false; rangeMenuOpen = true }
+                            OverflowMenuItem(if (newestAtBottom) "Newest at top" else "Newest at bottom", Icons.Filled.SwapVert) {
+                                menuOpen = false
+                                settings.putNewestAtBottom(!newestAtBottom)
+                            }
+                            HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                            OverflowMenuHeading("Vault")
+                            OverflowMenuItem("Settings", Icons.Filled.Settings) { menuOpen = false; onOpenSettings() }
+                            OverflowMenuItem("Lock now", Icons.Filled.Lock) { menuOpen = false; onLock() }
                         }
-                        DropdownMenu(rangeMenuOpen, { rangeMenuOpen = false }) {
+                        DropdownMenu(
+                            rangeMenuOpen, { rangeMenuOpen = false },
+                            modifier = Modifier.widthIn(min = 240.dp),
+                        ) {
+                            OverflowMenuHeading("Time range")
                             RangePreset.entries.forEach { preset ->
-                                DropdownMenuItem(
-                                    text = { Text(preset.label) },
-                                    leadingIcon = { if (rangePreset == preset) Icon(Icons.Filled.Check, null) },
-                                    onClick = { rangeMenuOpen = false; if (preset == RangePreset.CUSTOM) showRangePicker = true else rangePreset = preset },
-                                )
+                                OverflowMenuItem(preset.label, icon = null, selected = rangePreset == preset) {
+                                    rangeMenuOpen = false
+                                    if (preset == RangePreset.CUSTOM) showRangePicker = true else rangePreset = preset
+                                }
                             }
                         }
                     }

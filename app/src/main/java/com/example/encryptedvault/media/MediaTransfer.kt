@@ -48,6 +48,14 @@ object MediaTransfer {
     }.getOrNull() == true
 
     /** Copies [uri] into app cache (the worker deletes the copy once it is vaulted). */
+    /** Photos and videos only. Anything else is refused at import, so documents and other files never enter the vault. */
+    fun isPhotoOrVideo(mime: String?): Boolean = mime != null && (mime.startsWith("image/") || mime.startsWith("video/"))
+
+    /** MIME type of a picked file: what the provider reports, else guessed from its extension. */
+    fun mimeOf(context: Context, uri: Uri): String? = context.contentResolver.getType(uri)
+        ?: uri.lastPathSegment?.substringAfterLast('.', "")?.lowercase()?.takeIf { it.isNotEmpty() }
+            ?.let { android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(it) }
+
     fun stage(context: Context, uri: Uri): StagedFile? = runCatching {
         val info = SourceInfoResolver.resolve(context, uri)
         val mime = context.contentResolver.getType(uri)
