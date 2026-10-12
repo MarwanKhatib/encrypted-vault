@@ -26,6 +26,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.encryptedvault.VaultApp
+import com.example.encryptedvault.backup.PlainExport
 import com.example.encryptedvault.backup.VaultBackup
 import com.example.encryptedvault.crypto.BackupCrypto
 import kotlinx.coroutines.launch
@@ -41,6 +42,11 @@ internal fun BackupRows(onMessage: (String) -> Unit) {
     var pendingRestore by remember { mutableStateOf<Uri?>(null) }
     val createFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { pendingExport = it }
     val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { pendingRestore = it }
+    var showPlainWarning by remember { mutableStateOf(false) }
+    val pickFolder =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+            if (uri != null) scope.launch { onMessage(plainExportTo(context, uri)) }
+        }
 
     ActionRow(
         "Export encrypted backup",
@@ -53,6 +59,32 @@ internal fun BackupRows(onMessage: (String) -> Unit) {
         "Adds the items from a backup file to this vault. Items already here are skipped.",
         "Restore",
     ) { openFile.launch(arrayOf("*/*")) }
+    HorizontalDivider()
+    ActionRow(
+        "Export plain copies",
+        "Writes every photo and video as ordinary, unencrypted files, plus manifest.csv. Use with care.",
+        "Export",
+    ) { showPlainWarning = true }
+
+    if (showPlainWarning) {
+        AlertDialog(
+            onDismissRequest = { showPlainWarning = false },
+            title = { Text("Export unencrypted copies?") },
+            text = {
+                Text(
+                    "The exported files are NOT encrypted. Any app or person with access to the folder you choose can read them, " +
+                        "and they stay there after you lock the vault. Delete them when you no longer need them.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showPlainWarning = false
+                    pickFolder.launch(null)
+                }) { Text("I understand, choose folder") }
+            },
+            dismissButton = { TextButton(onClick = { showPlainWarning = false }) { Text("Cancel") } },
+        )
+    }
 
     pendingExport?.let { uri ->
         PassphraseDialog(
@@ -98,6 +130,23 @@ private suspend fun exportTo(
         "Export failed: ${e.message ?: "the file could not be written"}."
     } finally {
         passphrase.fill('\u0000')
+    }
+
+/** Writes unencrypted copies to the folder the user picked and returns the message to show (ADR-008). */
+private suspend fun plainExportTo(
+    context: Context,
+    uri: Uri,
+): String =
+    try {
+        if (VaultApp.sessionKey == null) {
+            "Unlock the vault before exporting."
+        } else {
+            val report = PlainExport.export(context, uri, AppSettings(context).stripExif)
+            val reason = report.lastError?.let { " Last error: $it." }.orEmpty()
+            "Exported ${report.written} file(s), failed ${report.failed}.$reason The copies are NOT encrypted: delete them when done."
+        }
+    } catch (e: IOException) {
+        "Plain export failed: ${e.message ?: "the folder could not be written"}."
     }
 
 /** Restores the backup and returns the message to show. The passphrase is wiped afterwards. */

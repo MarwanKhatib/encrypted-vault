@@ -30,6 +30,7 @@ Files over 500 MB are skipped.
 - **Restore to gallery:** each item goes back to its original folder and name. If the folder is gone it is recreated; if Android refuses the exact folder, the item goes to `<root>/Restored/<folder>`.
 - **Delete originals:** after an import, the app can ask Android to delete the phone's copies. Copies in Google Photos or another cloud backup are not removed.
 - **Backup:** Settings → Backup writes every item, with albums and captions, to one file encrypted with a passphrase you choose. Restore works on any device, and items already in the vault are skipped. The app never sends the file anywhere; you choose where it is saved.
+- **Plain export (unencrypted):** Settings → Backup → Export plain copies writes every non-trashed photo and video as ordinary files to a folder you pick, plus `manifest.csv` (names, folders, dates, favourite and hidden flags, captions, albums). The files are **not encrypted**; the app warns first. Location is removed from JPEG copies while Settings → Privacy → Remove location when sharing is on.
 - **Unlock:** a PIN pad (6–12 digits; a physical keyboard works too), fingerprint through the Keystore, a 24-word recovery phrase, lockout after wrong PINs, and an optional duress PIN that erases everything.
 - **Privacy:** screenshots and the recents preview are always blocked, and the vault locks as soon as the app leaves the screen. Multi-window also locks it. Optional idle lock (Settings → Privacy, off by default) locks after 1, 5 or 15 minutes without touch or key input. File names, folders, captions, and album titles are only stored encrypted.
 - **Disguise:** the launcher icon can be switched to Weather, Calculator, Notes, or Clock.
@@ -69,7 +70,7 @@ Back up the keystore **and** `keystore.properties`. Without both, you cannot shi
 
 - **Not tested on a real phone.** Split-screen auto-lock, the recents thumbnail, and the share flow are unverified on a device.
 - **Formats:** RAW and DNG are not supported. Video containers other than MP4 depend on the phone's codecs.
-- **Large videos** are decrypted in memory for playback, so very large files can be slow or fail on low-memory phones.
+- **Large videos** play from encrypted storage in segments; memory use stays at about one segment, so very large files are not loaded whole. Phones with very little memory may still stutter on 4K.
 - **Edited copies** are JPEG and carry no EXIF metadata. Edits are made from a downsampled decode (about 2400 px on the long edge), so the saved copy is smaller than a full-resolution original.
 - **Restore** gives trashed items a new 30-day window instead of their original date.
 - **Restored dates:** the media scanner may re-derive the date taken; file name and folder are kept.

@@ -31,7 +31,7 @@ object MediaTransfer {
     /** JPEG quality for photos saved from the editor and thumbnails restored from the vault. */
     private const val JPEG_QUALITY = 92
     private const val COPY_BUFFER_BYTES = 64 * 1024
-    private const val SHARE_DIR = "share"
+    internal const val SHARE_DIR = "share"
 
     /** Folder an older version decrypted videos into; it is only swept now, never written. */
     private const val PLAYBACK_DIR = "play"

@@ -1,7 +1,7 @@
 # ADR-008: Optional plain (unencrypted) export as an escape hatch
 
 ## Status
-Proposed
+Accepted (implemented in `backup/PlainExport.kt`; not yet tested through the folder picker on a device)
 
 ## Date
 2026-10-12
@@ -31,7 +31,8 @@ A plain export puts unencrypted media on storage that other apps can read. That 
 - Rejected.
 
 ## Consequences
-- Adds a path where plaintext leaves the encrypted store. Every test for "plaintext never reaches disk" needs an exception for this path, and the exception has to be narrow.
-- The warning is the main control. Review the wording before release.
-- The export writes into shared storage, so it must not reuse `cache/` or `files/vault/`.
-- Open question: whether to strip GPS from exported files by default (the share path already has that option).
+- Implemented choices: non-trashed items only (hidden items are included and marked in the manifest); one flat folder, with album names in `manifest.csv` rather than sub-folders; the location-stripping setting in Settings → Privacy applies (default on); files named after the item, and the provider renames duplicates.
+- Adds a path where plaintext leaves the encrypted store. The narrow exception is `PlainExport` only; the encrypted backup and share paths are unchanged.
+- The warning dialog is the main control. Review the wording before release.
+- Uses only platform APIs (`DocumentsContract`, `OpenDocumentTree`); no new dependency.
+- Open question: GPS stripping for non-JPEG formats (HEIC, PNG) is not done; only JPEG copies have location removed.
