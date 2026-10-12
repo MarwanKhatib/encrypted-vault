@@ -6,6 +6,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.encryptedvault.crypto.Bip39
 import com.example.encryptedvault.crypto.KeyHierarchy
 import com.example.encryptedvault.data.VaultDatabase
+import com.example.encryptedvault.data.VaultItem
 import com.example.encryptedvault.data.VaultRepository
 import com.example.encryptedvault.data.VaultStorage
 import com.example.encryptedvault.media.MediaTransfer
@@ -22,9 +23,9 @@ import org.junit.runner.RunWith
 import java.io.File
 
 /**
- * Imports every photo and video sample in filesDir/samples (JPEG, PNG, GIF, HEIC, MP4), checks non-media files are not stored, and checks each import is stored with
- * the right type, its size, and dimensions for images or a duration for video. Put the samples there with
- * `scripts/device-checks.sh formats`.
+ * Imports every photo and video sample in filesDir/samples (JPEG, PNG, GIF, HEIC, MP4), checks non-media files are not stored,
+ * and checks each import is stored with the right type, its size, and dimensions for images or a duration for video.
+ * Put the samples there with `scripts/device-checks.sh formats`.
  */
 @RunWith(AndroidJUnit4::class)
 class ImportFormatsTest {
@@ -94,20 +95,23 @@ class ImportFormatsTest {
         }
         for (sample in media) {
             val item = items.singleOrNull { it.name == sample.name }
-            if (item == null) {
-                problems += "not stored: ${sample.name}"
-                continue
-            }
-            val ext = sample.extension.lowercase()
-            expectedMime[ext]?.let { mime -> if (item.mimeType != mime) problems += "${sample.name}: type ${item.mimeType}, expected $mime" }
-            if (item.sizeBytes != sample.length()) problems += "${sample.name}: stored ${item.sizeBytes} bytes, file has ${sample.length()}"
-            when {
-                item.isVideo -> if (item.durationMs <= 0) problems += "${sample.name}: no duration"
-                item.mimeType.startsWith("image/") -> if (item.width <= 0 || item.height <= 0) problems += "${sample.name}: no dimensions"
-            }
+            problems += if (item == null) listOf("not stored: ${sample.name}") else problemsWith(sample, item)
         }
         assertTrue("problems:\n" + problems.joinToString("\n"), problems.isEmpty())
     }
+
+    /** Everything that is wrong with one stored item compared with the file it came from. */
+    private fun problemsWith(
+        sample: File,
+        item: VaultItem,
+    ): List<String> =
+        buildList {
+            val expected = expectedMime[sample.extension.lowercase()]
+            if (item.mimeType != expected) add("${sample.name}: type ${item.mimeType}, expected $expected")
+            if (item.sizeBytes != sample.length()) add("${sample.name}: stored ${item.sizeBytes} bytes, file has ${sample.length()}")
+            if (item.isVideo && item.durationMs <= 0) add("${sample.name}: no duration")
+            if (item.mimeType.startsWith("image/") && (item.width <= 0 || item.height <= 0)) add("${sample.name}: no dimensions")
+        }
 
     /** Copies [source] into the import folder under its own name, the way the picker stages files. */
     private fun stage(source: File): MediaTransfer.StagedFile {

@@ -73,6 +73,7 @@ import com.example.encryptedvault.VaultApp
 import com.example.encryptedvault.crypto.Bip39
 import com.example.encryptedvault.crypto.KeyHierarchy
 import com.example.encryptedvault.crypto.PinPolicy
+import com.example.encryptedvault.crypto.UnlockAttempts
 import com.example.encryptedvault.security.Biometric
 import com.example.encryptedvault.security.Biometric.findActivity
 import com.example.encryptedvault.security.PanicWipe
@@ -264,7 +265,10 @@ private fun PinPad(
 /** Steps of first-run setup: loss warning, choose a PIN, confirm it. */
 private enum class SetupStep { INTRO, PIN, CONFIRM }
 
-/** First-run flow: loss warning, PIN choice (weak PINs refused) and confirmation. Creates the vault with [KeyHierarchy.setUp] and passes the recovery words to [onDone]. */
+/**
+ * First-run flow: loss warning, PIN choice (weak PINs refused) and confirmation.
+ * Creates the vault with [KeyHierarchy.setUp] and passes the recovery words to [onDone].
+ */
 @Composable
 fun SetupScreen(
     keys: KeyHierarchy,
@@ -438,7 +442,10 @@ fun PhraseScreen(
 // ---------------------------------------------------------------------------------------------
 // Lock
 
-/** PIN pad shown while the vault is locked. Submits itself at the stored PIN length. Handles the real PIN, the duress PIN (silent wipe, see PanicWipe), biometrics, lockout and the recovery link. */
+/**
+ * PIN pad shown while the vault is locked. Submits itself at the stored PIN length.
+ * Handles the real PIN, the duress PIN (silent wipe, see PanicWipe), biometrics, lockout and the recovery link.
+ */
 @Composable
 fun LockScreen(
     keys: KeyHierarchy,
@@ -450,7 +457,7 @@ fun LockScreen(
     var pin by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var remaining by remember { mutableLongStateOf(keys.lockedForMs()) }
+    var remaining by remember { mutableLongStateOf(keys.attempts.lockedForMs()) }
     val scope = rememberCoroutineScope()
     val bio = remember { keys.biometricEnabled() && Biometric.available(ctx) }
     val pinLength = remember { keys.pinLength() } // 0 for vaults created before the length was stored
@@ -458,13 +465,13 @@ fun LockScreen(
     LaunchedEffect(remaining > 0) {
         while (remaining > 0) {
             delay(500)
-            remaining = keys.lockedForMs()
+            remaining = keys.attempts.lockedForMs()
         }
     }
 
     /** Completes an unlock: clears the failure counter and publishes the session key, which switches the app to the unlocked UI. */
     fun finish(key: javax.crypto.SecretKey) {
-        keys.resetFailures()
+        keys.attempts.resetFailures()
         VaultApp.sessionKey = key
         onUnlocked()
     }
@@ -487,10 +494,10 @@ fun LockScreen(
             if (key != null) {
                 finish(key)
             } else {
-                keys.recordFailure()
-                remaining = keys.lockedForMs()
+                keys.attempts.recordFailure()
+                remaining = keys.attempts.lockedForMs()
                 pin = ""
-                val left = KeyHierarchy.FREE_TRIES - keys.failCount()
+                val left = UnlockAttempts.FREE_TRIES - keys.attempts.failCount()
                 error = if (left > 0) "Wrong PIN ($left tries before delay)" else "Wrong PIN"
             }
         }
@@ -619,7 +626,7 @@ fun RecoverScreen(
                     val key = withContext(Dispatchers.Default) { keys.recover(words, pin.toCharArray(), bip39) }
                     busy = false
                     if (key != null) {
-                        keys.resetFailures()
+                        keys.attempts.resetFailures()
                         VaultApp.sessionKey = key
                         onDone()
                     } else {

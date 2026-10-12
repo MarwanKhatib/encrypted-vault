@@ -37,6 +37,13 @@ import javax.crypto.spec.SecretKeySpec
  */
 object VaultFiles {
     private const val CHUNK = 64 * 1024
+
+    /** Legacy (v1) files store a 96-bit IV in front of the ciphertext; the tag is 128 bits. */
+    private const val LEGACY_IV_BYTES = 12
+    private const val GCM_TAG_BITS = 128
+
+    /** Length of the derived stream key in bytes (AES-256). */
+    private const val STREAM_KEY_BYTES = 32
     private val MAGIC = "VLTSTRM2".toByteArray(Charsets.US_ASCII)
 
     /** Size of one authenticated ciphertext segment. */
@@ -124,18 +131,22 @@ object VaultFiles {
         file: File,
     ): InputStream {
         val fis = FileInputStream(file)
+        var opened = false
         try {
-            return if (hasMagic(fis)) {
-                aead(key).newDecryptingStream(fis, associatedData(file))
-            } else {
-                fis.channel.position(0)
-                val iv = ByteArray(12).also { check(fis.read(it) == 12) }
-                val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv)) }
-                CipherInputStream(fis, cipher)
-            }
-        } catch (e: Exception) {
-            fis.close()
-            throw e
+            val stream =
+                if (hasMagic(fis)) {
+                    aead(key).newDecryptingStream(fis, associatedData(file))
+                } else {
+                    fis.channel.position(0)
+                    val iv = ByteArray(LEGACY_IV_BYTES).also { check(fis.read(it) == LEGACY_IV_BYTES) }
+                    val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, iv)) }
+                    CipherInputStream(fis, cipher)
+                }
+            opened = true
+            return stream
+        } finally {
+            // The file stays open only when a stream was handed back to the caller.
+            if (!opened) fis.close()
         }
     }
 
@@ -175,7 +186,7 @@ object VaultFiles {
     private fun aead(key: SecretKey): AesGcmHkdfStreaming {
         val mac = Mac.getInstance("HmacSHA256").apply { init(SecretKeySpec(key.encoded, "HmacSHA256")) }
         val ikm = mac.doFinal("vault-stream-v2".toByteArray())
-        return AesGcmHkdfStreaming(ikm, "HmacSha256", 32, SEGMENT_BYTES, 0)
+        return AesGcmHkdfStreaming(ikm, "HmacSha256", STREAM_KEY_BYTES, SEGMENT_BYTES, 0)
     }
 
     /** Binds the ciphertext to its file name (without the `.tmp` suffix that writing uses). */

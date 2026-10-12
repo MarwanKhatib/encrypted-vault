@@ -8,21 +8,28 @@ import java.util.Locale
 
 /** Human-readable text helpers shared by all screens. Pure functions, covered by unit tests. */
 object Formatters {
+    private const val KIB = 1024L
+    private const val MIB = KIB * KIB
+    private const val GIB = MIB * KIB
+    private const val MILLIS_PER_SECOND = 1000L
+    private const val SECONDS_PER_MINUTE = 60L
+    private const val SECONDS_PER_HOUR = 3600L
+
     /** `1.5 MB`, `320 KB`, `12 B`. */
     fun fileSize(bytes: Long): String =
         when {
-            bytes >= 1L shl 30 -> String.format(Locale.US, "%.1f GB", bytes / (1L shl 30).toDouble())
-            bytes >= 1L shl 20 -> String.format(Locale.US, "%.1f MB", bytes / (1L shl 20).toDouble())
-            bytes >= 1L shl 10 -> String.format(Locale.US, "%.0f KB", bytes / (1L shl 10).toDouble())
+            bytes >= GIB -> String.format(Locale.US, "%.1f GB", bytes / GIB.toDouble())
+            bytes >= MIB -> String.format(Locale.US, "%.1f MB", bytes / MIB.toDouble())
+            bytes >= KIB -> String.format(Locale.US, "%.0f KB", bytes / KIB.toDouble())
             else -> "$bytes B"
         }
 
     /** `0:45`, `12:03`, `1:02:09`. */
     fun duration(millis: Long): String {
-        val totalSeconds = millis / 1000
-        val hours = totalSeconds / 3600
-        val minutes = totalSeconds % 3600 / 60
-        val seconds = totalSeconds % 60
+        val totalSeconds = millis / MILLIS_PER_SECOND
+        val hours = totalSeconds / SECONDS_PER_HOUR
+        val minutes = totalSeconds % SECONDS_PER_HOUR / SECONDS_PER_MINUTE
+        val seconds = totalSeconds % SECONDS_PER_MINUTE
         return if (hours > 0) {
             String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
         } else {

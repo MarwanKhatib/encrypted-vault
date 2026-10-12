@@ -22,7 +22,7 @@ object SourceInfoResolver {
         context: Context,
         uri: Uri,
     ): SourceInfo {
-        val mediaUri = if (Build.VERSION.SDK_INT >= 31) runCatching { MediaStore.getMediaUri(context, uri) }.getOrNull() else null
+        val mediaUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) runCatching { MediaStore.getMediaUri(context, uri) }.getOrNull() else null
         return fromMediaStore(context, mediaUri ?: uri) ?: fromOpenable(context, uri)
     }
 

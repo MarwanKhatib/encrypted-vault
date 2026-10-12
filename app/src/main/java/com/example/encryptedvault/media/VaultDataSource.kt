@@ -9,7 +9,24 @@ import java.io.File
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.channels.SeekableByteChannel
+import java.security.GeneralSecurityException
 import javax.crypto.SecretKey
+
+/**
+ * Runs [block] and rethrows any I/O or cryptographic failure as an [IOException] with [message], keeping the original as the cause.
+ * Media3 only understands IOException, so authentication failures from the vault must be translated here.
+ */
+private inline fun <T> vaultIo(
+    message: String,
+    block: () -> T,
+): T =
+    try {
+        block()
+    } catch (e: IOException) {
+        throw IOException(message, e)
+    } catch (e: GeneralSecurityException) {
+        throw IOException(message, e)
+    }
 
 /**
  * ExoPlayer data source that serves a vaulted video straight from its ciphertext.
@@ -43,20 +60,17 @@ class VaultDataSource(
         transferInitializing(dataSpec)
         val hash = dataSpec.uri.host ?: throw IOException("missing item id in ${dataSpec.uri}")
         val masterKey = key() ?: throw IOException("vault is locked")
-        val ch =
-            try {
-                openChannel(masterKey, fileFor(hash))
-            } catch (e: Exception) {
-                throw IOException("cannot open encrypted video", e)
-            }
+        val ch = vaultIo("cannot open encrypted video") { openChannel(masterKey, fileFor(hash)) }
         channel = ch
         try {
-            ch.position(dataSpec.position)
-            val available = ch.size() - dataSpec.position
-            bytesRemaining = if (dataSpec.length == C.LENGTH_UNSET.toLong()) available else minOf(dataSpec.length, available)
-        } catch (e: Exception) {
+            vaultIo("cannot seek in encrypted video") {
+                ch.position(dataSpec.position)
+                val available = ch.size() - dataSpec.position
+                bytesRemaining = if (dataSpec.length == C.LENGTH_UNSET.toLong()) available else minOf(dataSpec.length, available)
+            }
+        } catch (e: IOException) {
             close()
-            throw IOException("cannot seek in encrypted video", e)
+            throw e
         }
         transferStarted(dataSpec)
         return bytesRemaining
@@ -72,12 +86,7 @@ class VaultDataSource(
         if (bytesRemaining == 0L) return C.RESULT_END_OF_INPUT
         val ch = channel ?: throw IOException("data source is not open")
         val wanted = minOf(length.toLong(), bytesRemaining).toInt()
-        val read =
-            try {
-                ch.read(ByteBuffer.wrap(buffer, offset, wanted))
-            } catch (e: Exception) {
-                throw IOException("decryption failed", e)
-            }
+        val read = vaultIo("decryption failed") { ch.read(ByteBuffer.wrap(buffer, offset, wanted)) }
         if (read < 0) return C.RESULT_END_OF_INPUT
         bytesRemaining -= read
         bytesTransferred(read)

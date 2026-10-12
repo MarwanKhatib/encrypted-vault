@@ -225,7 +225,9 @@ fun SettingsScreen(
                     }
                 }
                 Text(
-                    "Your recovery phrase was shown once at setup and is never stored. If you lose both your PIN and the phrase, the photos cannot be recovered. Deleted items stay in Recently Deleted for 30 days.",
+                    "Your recovery phrase was shown once at setup and is never stored. " +
+                        "If you lose both your PIN and the phrase, the photos cannot be recovered. " +
+                        "Deleted items stay in Recently Deleted for 30 days.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -393,7 +395,8 @@ private fun DuressPinDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!armed) {
                     Text(
-                        "Entering this PIN on the lock screen permanently erases every photo and video and opens an empty vault. It cannot be undone, and your recovery phrase will not bring the photos back.",
+                        "Entering this PIN on the lock screen permanently erases every photo and video and opens an empty vault. " +
+                            "It cannot be undone, and your recovery phrase will not bring the photos back.",
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
                     )

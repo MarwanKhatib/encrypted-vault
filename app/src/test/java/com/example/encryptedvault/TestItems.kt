@@ -4,7 +4,11 @@ import com.example.encryptedvault.data.VaultItem
 import java.time.LocalDate
 import java.time.ZoneOffset
 
-/** Builds [VaultItem]s for unit tests; every field has a sensible default so tests only set what they check. */
+/**
+ * Builds [VaultItem]s for unit tests; every field has a sensible default so tests only set what they check.
+ * It takes many parameters on purpose: a fixture with named defaults is clearer than a builder for a test-only factory.
+ */
+@Suppress("LongParameterList")
 fun testItem(
     id: Long = 1,
     day: LocalDate = LocalDate.of(2024, 3, 15),

@@ -11,6 +11,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.example.encryptedvault.VaultApp
 import com.example.encryptedvault.crypto.VaultFiles
+import com.example.encryptedvault.data.PhotoDao
 import com.example.encryptedvault.data.PhotoEntity
 import com.example.encryptedvault.data.PhotoMetadata
 import com.example.encryptedvault.data.VaultDatabase
@@ -41,37 +42,57 @@ class ImportWorker(
         VaultStorage.sweepTemporaryFiles(applicationContext)
 
         val paths = inputData.getStringArray(KEY_PATHS) ?: return Result.success()
-        val names = inputData.getStringArray(KEY_NAMES).orEmpty()
-        val folders = inputData.getStringArray(KEY_FOLDERS).orEmpty()
-        val takenAt = inputData.getLongArray(KEY_TAKEN_AT) ?: LongArray(0)
-
-        for ((index, path) in paths.withIndex()) {
-            val source = File(path)
-            if (!source.exists()) continue
-            val isStaged = source.path.startsWith(applicationContext.cacheDir.path)
-            val hash = VaultFiles.sha256(source)
-            if (dao.findCompleteByHash(hash) != null) {
-                if (isStaged) source.delete()
-                continue
-            } // already vaulted
-
-            val mime =
-                android.webkit.MimeTypeMap
-                    .getSingleton()
-                    .getMimeTypeFromExtension(source.extension.lowercase()) ?: "application/octet-stream"
-            val info =
-                SourceInfo(
-                    names.getOrNull(index).orEmpty(),
-                    folders.getOrNull(index)?.takeIf { it.isNotEmpty() },
-                    takenAt.getOrNull(index) ?: source.lastModified(),
-                )
-            // One unreadable file must not abort the rest of the batch.
-            runCatching { importOne(key, source, hash, mime, info) }
-                .onFailure { VaultStorage.deleteAll(applicationContext, hash) }
-            if (isStaged) source.delete() // no plaintext left in cache, even on failure (the original stays untouched)
-        }
+        val batch =
+            BatchInput(
+                names = inputData.getStringArray(KEY_NAMES).orEmpty(),
+                folders = inputData.getStringArray(KEY_FOLDERS).orEmpty(),
+                takenAt = inputData.getLongArray(KEY_TAKEN_AT) ?: LongArray(0),
+            )
+        paths.forEachIndexed { index, path -> importEntry(key, dao, path, index, batch) }
         return Result.success()
     }
+
+    /**
+     * Imports the staged or picked file at [path]. A missing file or one that is already vaulted is skipped; a staged copy is
+     * always deleted afterwards, so no plaintext is left in the cache even on failure (the original stays untouched).
+     */
+    private suspend fun importEntry(
+        key: SecretKey,
+        dao: PhotoDao,
+        path: String,
+        index: Int,
+        batch: BatchInput,
+    ) {
+        val source = File(path)
+        if (!source.exists()) return
+        val isStaged = source.path.startsWith(applicationContext.cacheDir.path)
+        val hash = VaultFiles.sha256(source)
+        if (dao.findCompleteByHash(hash) != null) {
+            if (isStaged) source.delete()
+            return
+        }
+        val mime =
+            android.webkit.MimeTypeMap
+                .getSingleton()
+                .getMimeTypeFromExtension(source.extension.lowercase()) ?: "application/octet-stream"
+        val info =
+            SourceInfo(
+                batch.names.getOrNull(index).orEmpty(),
+                batch.folders.getOrNull(index)?.takeIf { it.isNotEmpty() },
+                batch.takenAt.getOrNull(index) ?: source.lastModified(),
+            )
+        // One unreadable file must not abort the rest of the batch.
+        runCatching { importOne(key, source, hash, mime, info) }
+            .onFailure { VaultStorage.deleteAll(applicationContext, hash) }
+        if (isStaged) source.delete()
+    }
+
+    /** The per-batch arrays from the worker input: display names, source folders and capture times, indexed like the paths. */
+    private class BatchInput(
+        val names: Array<out String>,
+        val folders: Array<out String>,
+        val takenAt: LongArray,
+    )
 
     /** Encrypts one file and commits its database row; throws on any failure so the caller can clean up. */
     private suspend fun importOne(
@@ -95,14 +116,16 @@ class ImportWorker(
                 durationMs = if (mime.startsWith("video/")) Thumbnails.videoDurationMs(source) else 0,
             )
         val id = dao.upsert(pending)
+        var committed = false
         try {
             source.inputStream().use { VaultFiles.encryptAtomic(key, it, VaultStorage.content(applicationContext, hash)) }
             writeThumbnail(key, source, mime, hash)
             val metadata = PhotoMetadata(info.name, info.folder)
             dao.upsert(pending.copy(id = id, status = "complete", metaEnc = VaultRepository.encryptMetadata(key, metadata)))
-        } catch (e: Exception) {
-            dao.deleteByIds(listOf(id))
-            throw e
+            committed = true
+        } finally {
+            // A row that never reached "complete" is removed, whatever the failure; the caller still sees the exception.
+            if (!committed) dao.deleteByIds(listOf(id))
         }
     }
 
@@ -113,12 +136,16 @@ class ImportWorker(
         mime: String,
         hash: String,
     ) {
-        val jpeg = ByteArrayOutputStream().also { Thumbnails.generate(source, mime).compress(Bitmap.CompressFormat.JPEG, 82, it) }.toByteArray()
+        val bitmap = Thumbnails.generate(source, mime)
+        val jpeg = ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.JPEG, THUMBNAIL_JPEG_QUALITY, it) }.toByteArray()
         VaultFiles.encryptAtomic(key, jpeg.inputStream(), VaultStorage.thumbnail(applicationContext, hash))
     }
 
     companion object {
         const val KEY_PATHS = "paths"
+
+        /** JPEG quality of the encrypted thumbnail that the grid shows; smaller than the full file, so it loads fast. */
+        const val THUMBNAIL_JPEG_QUALITY = 82
         const val KEY_NAMES = "names"
         const val KEY_FOLDERS = "folders"
         const val KEY_TAKEN_AT = "taken_at"

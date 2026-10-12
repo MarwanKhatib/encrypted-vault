@@ -1,13 +1,13 @@
 package com.example.encryptedvault.crypto
 
 import android.content.Context
-import android.os.SystemClock
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.security.keystore.StrongBoxUnavailableException
 import android.util.Base64
-import java.io.File
+import android.util.Log
+import java.security.GeneralSecurityException
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -34,11 +34,18 @@ import javax.crypto.spec.SecretKeySpec
  * Format v1 vaults (PIN layer only, 310k iterations) are upgraded to v2 transparently on the next successful PIN unlock.
  *
  * A second, independent PIN (the duress PIN) is stored only as a salted PBKDF2 verifier; see [isDuressPin].
+ *
+ * This is one cohesive key-management facade on purpose: the wrap and unwrap order and the migrations from older formats depend
+ * on each other, so the functions are kept together rather than spread over several classes.
  */
+@Suppress("TooManyFunctions")
 class KeyHierarchy(
     context: Context,
 ) {
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    /** Wrong-PIN counter and lockout; see [UnlockAttempts]. */
+    val attempts = UnlockAttempts(prefs)
 
     /** True once [setUp] has finished (the PIN wrapper exists). */
     fun isSetUp() = prefs.contains(KEY_WRAPPED_PIN)
@@ -188,11 +195,16 @@ class KeyHierarchy(
     fun biometricUnlockCipher(): Cipher? {
         val blob = prefs.getString(KEY_WRAPPED_BIO, null)?.let(::b64) ?: return null
         return try {
-            Cipher.getInstance(GCM).apply { init(Cipher.DECRYPT_MODE, bioKey(), GCMParameterSpec(128, blob, 0, 12)) }
+            Cipher.getInstance(GCM).apply { init(Cipher.DECRYPT_MODE, bioKey(), GCMParameterSpec(GCM_TAG_BITS, blob, 0, GCM_IV_BYTES)) }
         } catch (e: KeyPermanentlyInvalidatedException) {
+            Log.i(TAG, "biometric key invalidated by a new enrolment; biometric unlock turned off (${e.message})")
             disableBiometric()
             null
-        } catch (e: Exception) {
+        } catch (e: GeneralSecurityException) {
+            Log.w(TAG, "biometric cipher unavailable: ${e.javaClass.simpleName}")
+            null
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "biometric key store not ready: ${e.javaClass.simpleName}")
             null
         }
     }
@@ -201,7 +213,7 @@ class KeyHierarchy(
     fun unlockWithBiometric(authedCipher: Cipher): SecretKey? =
         runCatching {
             val blob = b64(prefs.getString(KEY_WRAPPED_BIO, null)!!)
-            SecretKeySpec(authedCipher.doFinal(blob, 12, blob.size - 12), "AES")
+            SecretKeySpec(authedCipher.doFinal(blob, GCM_IV_BYTES, blob.size - GCM_IV_BYTES), "AES")
         }.getOrNull()
 
     /** Turns biometric unlock off and deletes its Keystore key. */
@@ -215,47 +227,6 @@ class KeyHierarchy(
 
     /** The auth-gated biometric Keystore key; created on first use (StrongBox first, TEE fallback). */
     private fun bioKey(): SecretKey = keystoreAesKey(BIO_ALIAS, authRequired = true)
-
-    // ---- Persistent PIN lockout ---------------------------------------------------------------
-    // Survives app restarts. It is timed on the monotonic clock (SystemClock.elapsedRealtime), so changing the wall clock cannot
-    // shorten it. A reboot restarts the monotonic clock, so a lockout that spans a reboot is enforced in full again. The KDF cost
-    // and the Keystore layer still make every guess run on this device.
-
-    /** Wrong PIN attempts since the last success. */
-    fun failCount() = prefs.getInt(KEY_FAILS, 0)
-
-    /** Milliseconds until the next attempt is allowed (0 when not locked out). */
-    fun lockedForMs(): Long =
-        remainingLockMs(
-            lockMs = prefs.getLong(KEY_LOCK_MS, 0),
-            startedAtElapsed = prefs.getLong(KEY_LOCK_STARTED, 0),
-            nowElapsed = SystemClock.elapsedRealtime(),
-            sameBoot = prefs.getString(KEY_LOCK_BOOT, null) == currentBootId(),
-        )
-
-    /** Counts a wrong PIN and, after [FREE_TRIES], starts an exponentially growing delay (30 s doubling, capped at 15 min). */
-    fun recordFailure() {
-        val n = failCount() + 1
-        val e = prefs.edit().putInt(KEY_FAILS, n)
-        if (n >= FREE_TRIES) {
-            val secs = minOf(900L, 30L shl (n - FREE_TRIES).coerceAtMost(5))
-            e
-                .putLong(KEY_LOCK_MS, secs * 1000)
-                .putLong(KEY_LOCK_STARTED, SystemClock.elapsedRealtime())
-                .putString(KEY_LOCK_BOOT, currentBootId())
-        }
-        e.commit()
-    }
-
-    /** Clears the failure counter and any lockout (called after a successful unlock). */
-    fun resetFailures() =
-        prefs
-            .edit()
-            .remove(KEY_FAILS)
-            .remove(KEY_LOCK_MS)
-            .remove(KEY_LOCK_STARTED)
-            .remove(KEY_LOCK_BOOT)
-            .commit()
 
     // ---- Internals ----------------------------------------------------------------------------
 
@@ -280,7 +251,7 @@ class KeyHierarchy(
     /** HKDF-SHA256 (extract + one expand block) of the phrase entropy into the 256-bit master key. */
     private fun deriveMaster(entropy: ByteArray): SecretKey {
         val mac = Mac.getInstance("HmacSHA256")
-        mac.init(SecretKeySpec(ByteArray(32), "HmacSHA256"))
+        mac.init(SecretKeySpec(ByteArray(AES_KEY_BYTES), HMAC))
         val prk = mac.doFinal(entropy)
         mac.init(SecretKeySpec(prk, "HmacSHA256"))
         return SecretKeySpec(mac.doFinal("vault-master-v1".toByteArray() + byteArrayOf(1)), "AES")
@@ -304,7 +275,7 @@ class KeyHierarchy(
                     .Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
                     .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                     .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                    .setKeySize(256)
+                    .setKeySize(AES_KEY_BITS)
                     .setIsStrongBoxBacked(strongBox)
                     .apply { if (authRequired) setUserAuthenticationRequired(true).setInvalidatedByBiometricEnrollment(true) }
                     .build()
@@ -313,14 +284,25 @@ class KeyHierarchy(
         return try {
             generate(true)
         } catch (e: StrongBoxUnavailableException) {
+            Log.i(TAG, "StrongBox unavailable (${e.message}); using the TEE")
             generate(false)
         }
     }
 
     companion object {
+        private const val TAG = "KeyHierarchy"
         private const val PREFS = "vault_keys"
         private const val KEYSTORE = "AndroidKeyStore"
         private const val GCM = "AES/GCM/NoPadding"
+
+        /** AES-GCM nonce length in bytes: 96 bits. */
+        private const val GCM_IV_BYTES = 12
+
+        /** AES-GCM authentication tag length in bits. */
+        private const val GCM_TAG_BITS = 128
+        private const val AES_KEY_BITS = 256
+        private const val AES_KEY_BYTES = 32
+        private const val HMAC = "HmacSHA256"
         private const val KEY_SALT = "salt"
         private const val KEY_WRAPPED_PIN = "wrapped_pin"
         private const val KEY_WRAP_VERSION = "wrap_v"
@@ -330,36 +312,11 @@ class KeyHierarchy(
         private const val KEY_DURESS_HASH = "duress_hash"
         private const val KEY_DURESS_ITERATIONS = "duress_iter"
         private const val KEY_WRAPPED_BIO = "wrapped_bio"
-        private const val KEY_FAILS = "fails"
-        private const val KEY_LOCK_MS = "lock_ms"
-        private const val KEY_LOCK_STARTED = "lock_started"
-        private const val KEY_LOCK_BOOT = "lock_boot"
-
-        /**
-         * Time left in a lockout of [lockMs] that started at [startedAtElapsed] (monotonic). Only time measured within the same boot
-         * counts down; a different boot, or a clock that appears to go backwards, keeps the full lockout.
-         */
-        internal fun remainingLockMs(
-            lockMs: Long,
-            startedAtElapsed: Long,
-            nowElapsed: Long,
-            sameBoot: Boolean,
-        ): Long {
-            if (lockMs <= 0) return 0
-            val passed = if (sameBoot) (nowElapsed - startedAtElapsed).coerceAtLeast(0) else 0L
-            return (lockMs - passed).coerceAtLeast(0)
-        }
-
-        /** Kernel boot ID: changes on every reboot. Unknown when the file cannot be read, which then counts as the same boot. */
-        internal fun currentBootId(): String = runCatching { File("/proc/sys/kernel/random/boot_id").readText().trim() }.getOrDefault("unknown")
 
         /** Pre-v2 vaults also stored the master key under an unauthenticated Keystore key; nothing reads it and it is removed on upgrade. */
         private const val KEY_WRAPPED_KS_OBSOLETE = "wrapped_ks"
         private const val KS_ALIAS = "vault_wrap_key"
         private const val BIO_ALIAS = "vault_bio_key"
-
-        /** Wrong PINs allowed before the delay starts. */
-        const val FREE_TRIES = 5
 
         /** Base64 without line wraps, for storing bytes in preferences. */
         private fun b64(b: ByteArray) = Base64.encodeToString(b, Base64.NO_WRAP)
@@ -382,8 +339,8 @@ class KeyHierarchy(
             blob: ByteArray,
         ): ByteArray {
             val c = Cipher.getInstance(GCM)
-            c.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, blob, 0, 12))
-            return c.doFinal(blob, 12, blob.size - 12)
+            c.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, blob, 0, GCM_IV_BYTES))
+            return c.doFinal(blob, GCM_IV_BYTES, blob.size - GCM_IV_BYTES)
         }
     }
 }

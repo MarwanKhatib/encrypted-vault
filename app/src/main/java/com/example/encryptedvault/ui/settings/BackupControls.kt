@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.example.encryptedvault.VaultApp
 import com.example.encryptedvault.backup.VaultBackup
 import com.example.encryptedvault.crypto.BackupCrypto
 import kotlinx.coroutines.launch
@@ -80,36 +81,48 @@ private suspend fun exportTo(
     context: Context,
     uri: Uri,
     passphrase: CharArray,
-): String {
+): String =
     try {
-        val out = context.contentResolver.openOutputStream(uri) ?: return "Couldn't open the file for writing."
-        return "Exported ${VaultBackup.export(context, passphrase, out)} item(s)."
+        when {
+            VaultApp.sessionKey == null -> "Unlock the vault before exporting."
+            else -> {
+                val out = context.contentResolver.openOutputStream(uri)
+                if (out == null) {
+                    "Couldn't open the file for writing."
+                } else {
+                    "Exported ${VaultBackup.export(context, passphrase, out)} item(s)."
+                }
+            }
+        }
     } catch (e: IOException) {
-        return "Export failed: ${e.message ?: "the file could not be written"}."
-    } catch (e: IllegalStateException) {
-        return "Unlock the vault before exporting."
+        "Export failed: ${e.message ?: "the file could not be written"}."
     } finally {
         passphrase.fill('\u0000')
     }
-}
 
 /** Restores the backup and returns the message to show. The passphrase is wiped afterwards. */
 private suspend fun restoreFrom(
     context: Context,
     uri: Uri,
     passphrase: CharArray,
-): String {
+): String =
     try {
-        val input = context.contentResolver.openInputStream(uri) ?: return "Couldn't open the file."
-        val report = input.use { VaultBackup.restore(context, passphrase, it) }
-        return "Restored ${report.imported}, skipped ${report.skipped} already here, failed ${report.failed}."
+        if (VaultApp.sessionKey == null) "Unlock the vault before restoring." else restoreOpened(context, uri, passphrase)
     } catch (e: IOException) {
-        return "Restore failed: wrong passphrase or a damaged file."
-    } catch (e: IllegalStateException) {
-        return "Unlock the vault before restoring."
+        "Restore failed: ${e.message ?: "wrong passphrase or a damaged file"}."
     } finally {
         passphrase.fill('\u0000')
     }
+
+/** Reads the backup file at [uri] into the unlocked vault and describes the outcome. */
+private suspend fun restoreOpened(
+    context: Context,
+    uri: Uri,
+    passphrase: CharArray,
+): String {
+    val input = context.contentResolver.openInputStream(uri) ?: return "Couldn't open the file."
+    val report = input.use { VaultBackup.restore(context, passphrase, it) }
+    return "Restored ${report.imported}, skipped ${report.skipped} already here, failed ${report.failed}."
 }
 
 /** Asks for a passphrase. When [creating], it must be typed twice and meet the minimum length, and the user is warned it cannot be recovered. */

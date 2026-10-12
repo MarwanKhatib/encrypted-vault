@@ -184,7 +184,10 @@ interface AlbumDao {
     version = 5,
     exportSchema = true,
 )
-/** Room database of the vault (schema v5). Every version is exported to `app/schemas` and covered by `DatabaseMigrationTest`; never add a destructive fallback. */
+/**
+ * Room database of the vault (schema v5). Every version is exported to `app/schemas` and covered by `DatabaseMigrationTest`.
+ * Never add a destructive fallback.
+ */
 abstract class VaultDatabase : RoomDatabase() {
     /** Data access for the `photos` table. */
     abstract fun photoDao(): PhotoDao
@@ -261,7 +264,7 @@ abstract class VaultDatabase : RoomDatabase() {
             instance ?: synchronized(this) {
                 instance ?: Room
                     .databaseBuilder(context.applicationContext, VaultDatabase::class.java, DB_NAME)
-                    .addMigrations(*MIGRATIONS)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also { instance = it }
             }

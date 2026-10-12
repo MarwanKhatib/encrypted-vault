@@ -56,7 +56,8 @@ class DatabaseMigrationTest {
     fun migratesFromV2DroppingClearTextNameButKeepingFavorites() {
         helper.createDatabase(DB, 2).apply {
             execSQL(
-                "INSERT INTO photos (hash, mimeType, timestamp, status, name, size, favorite) VALUES ('h2', 'video/mp4', 2000, 'complete', 'secret-name.mp4', 55, 1)",
+                "INSERT INTO photos (hash, mimeType, timestamp, status, name, size, favorite) " +
+                    "VALUES ('h2', 'video/mp4', 2000, 'complete', 'secret-name.mp4', 55, 1)",
             )
             close()
         }

@@ -27,6 +27,10 @@ import javax.crypto.SecretKey
  */
 object MediaTransfer {
     internal const val IMPORT_DIR = "import"
+
+    /** JPEG quality for photos saved from the editor and thumbnails restored from the vault. */
+    private const val JPEG_QUALITY = 92
+    private const val COPY_BUFFER_BYTES = 64 * 1024
     private const val SHARE_DIR = "share"
 
     /** Folder an older version decrypted videos into; it is only swept now, never written. */
@@ -99,7 +103,7 @@ object MediaTransfer {
     ): StagedFile? =
         runCatching {
             val file = File(File(context.cacheDir, IMPORT_DIR).apply { mkdirs() }, "${System.nanoTime()}.jpg")
-            file.outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.JPEG, 92, it)) }
+            file.outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it)) }
             file.setLastModified(info.takenAt)
             StagedFile(file.path, info)
         }.getOrNull()
@@ -119,14 +123,14 @@ object MediaTransfer {
                 val hash = context.contentResolver.openInputStream(uri)!!.use { VaultFiles.sha256(it) }
                 if (dao.findCompleteByHash(hash) == null) return@runCatching null
                 VaultFiles.decryptStream(key, VaultStorage.content(context, hash)).use { input ->
-                    val sink = ByteArray(64 * 1024)
+                    val sink = ByteArray(COPY_BUFFER_BYTES)
                     while (input.read(sink) >=
                         0
                     ) {
                         Unit
                     }
                 }
-                if (Build.VERSION.SDK_INT >= 31) MediaStore.getMediaUri(context, uri) else null
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaStore.getMediaUri(context, uri) else null
             }.getOrNull()
         }
     }
@@ -169,14 +173,16 @@ object MediaTransfer {
                             RestoreCollection.DOWNLOADS -> MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
                         }
                     val uri = context.contentResolver.insert(collection, values)!!
+                    var written = false
                     try {
                         context.contentResolver.openOutputStream(uri)!!.use { out ->
                             VaultFiles.decryptStream(key, VaultStorage.content(context, item.hash)).use { it.copyTo(out) }
                         }
                         context.contentResolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
-                    } catch (e: Exception) {
-                        context.contentResolver.delete(uri, null, null)
-                        throw e
+                        written = true
+                    } finally {
+                        // Remove the half-written MediaStore row if anything above failed.
+                        if (!written) context.contentResolver.delete(uri, null, null)
                     }
                 }.isSuccess
             if (ok) restored += item.id

@@ -9,6 +9,9 @@ import android.graphics.Paint
 import kotlin.math.ceil
 import kotlin.math.floor
 
+/** 16:9 as a width/height ratio, shared by the 16:9 and 9:16 presets. */
+private const val WIDESCREEN = 16f / 9f
+
 /** Crop shapes offered by the editor; ratio is width / height of the result (null = unlocked, drag freely). */
 enum class CropAspect(
     val label: String,
@@ -18,8 +21,8 @@ enum class CropAspect(
     SQUARE("1:1", 1f),
     FOUR_THREE("4:3", 4f / 3f),
     THREE_FOUR("3:4", 3f / 4f),
-    SIXTEEN_NINE("16:9", 16f / 9f),
-    NINE_SIXTEEN("9:16", 9f / 16f),
+    SIXTEEN_NINE("16:9", WIDESCREEN),
+    NINE_SIXTEEN("9:16", 1f / WIDESCREEN),
 }
 
 /** Corner of the crop frame that the user drags. */
@@ -142,6 +145,27 @@ data class Edit(
 
 /** Applies an [Edit] to a bitmap. The crop and colour-matrix math is pure so it is unit-tested; only [apply] needs Android. */
 object ImageEdits {
+    /** A half turn in degrees: a rotation that is a multiple of this keeps the width and height in place. */
+    private const val HALF_TURN_DEGREES = 180
+
+    /** Mid-grey on the 0..255 channel scale; contrast pivots around it. */
+    private const val MID_GREY = 128f
+
+    /** Brightness slider (-1..1) to the 0..255 offset the colour matrix uses. */
+    private const val BRIGHTNESS_SCALE = 255f
+    private const val VIVID_SATURATION = 1.4f
+    private const val VIVID_CONTRAST = 1.1f
+    private const val FADE_CONTRAST = 0.85f
+
+    /** Warm look: lifts red, cuts blue. Row-major 4×5 matrix. */
+    private val WARM_MATRIX = floatArrayOf(1.08f, 0f, 0f, 0f, 6f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 0.9f, 0f, -6f, 0f, 0f, 0f, 1f, 0f)
+
+    /** Cool look: cuts red, lifts blue. */
+    private val COOL_MATRIX = floatArrayOf(0.92f, 0f, 0f, 0f, -6f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1.08f, 0f, 6f, 0f, 0f, 0f, 1f, 0f)
+
+    /** Faded look: lifts the blacks. */
+    private val FADE_MATRIX = floatArrayOf(1f, 0f, 0f, 0f, 20f, 0f, 1f, 0f, 0f, 20f, 0f, 0f, 1f, 0f, 20f, 0f, 0f, 0f, 1f, 0f)
+
     /** Largest centred frame of [ratio] (w/h) on an image of [imageAspect] (w/h), as fractions. */
     fun presetCrop(
         ratio: Float,
@@ -162,7 +186,7 @@ object ImageEdits {
         rotation: Int,
     ): Float {
         val aspect = width.toFloat() / height
-        return if (rotation % 180 == 0) aspect else 1f / aspect
+        return if (rotation % HALF_TURN_DEGREES == 0) aspect else 1f / aspect
     }
 
     /** 4×5 colour matrix (row-major, 20 floats) for the filter plus sliders. */
@@ -170,24 +194,16 @@ object ImageEdits {
         val m = ColorMatrix()
         when (e.filter) {
             PhotoFilter.NONE -> Unit
-            PhotoFilter.VIVID -> m.postConcat(saturate(1.4f).also { it.postConcat(contrast(1.1f)) })
-            PhotoFilter.WARM -> m.postConcat(ColorMatrix(floatArrayOf(1.08f, 0f, 0f, 0f, 6f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 0.9f, 0f, -6f, 0f, 0f, 0f, 1f, 0f)))
-            PhotoFilter.COOL -> m.postConcat(ColorMatrix(floatArrayOf(0.92f, 0f, 0f, 0f, -6f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1.08f, 0f, 6f, 0f, 0f, 0f, 1f, 0f)))
+            PhotoFilter.VIVID -> m.postConcat(saturate(VIVID_SATURATION).also { it.postConcat(contrast(VIVID_CONTRAST)) })
+            PhotoFilter.WARM -> m.postConcat(ColorMatrix(WARM_MATRIX))
+            PhotoFilter.COOL -> m.postConcat(ColorMatrix(COOL_MATRIX))
             PhotoFilter.MONO -> m.postConcat(saturate(0f))
-            PhotoFilter.FADE ->
-                m.postConcat(
-                    contrast(0.85f).also {
-                        it.postConcat(ColorMatrix(floatArrayOf(1f, 0f, 0f, 0f, 20f, 0f, 1f, 0f, 0f, 20f, 0f, 0f, 1f, 0f, 20f, 0f, 0f, 0f, 1f, 0f)))
-                    },
-                )
+            PhotoFilter.FADE -> m.postConcat(contrast(FADE_CONTRAST).also { it.postConcat(ColorMatrix(FADE_MATRIX)) })
         }
         m.postConcat(saturate(e.saturation))
         m.postConcat(contrast(e.contrast))
-        m.postConcat(
-            ColorMatrix(
-                floatArrayOf(1f, 0f, 0f, 0f, e.brightness * 255f, 0f, 1f, 0f, 0f, e.brightness * 255f, 0f, 0f, 1f, 0f, e.brightness * 255f, 0f, 0f, 0f, 1f, 0f),
-            ),
-        )
+        val shift = e.brightness * BRIGHTNESS_SCALE
+        m.postConcat(ColorMatrix(floatArrayOf(1f, 0f, 0f, 0f, shift, 0f, 1f, 0f, 0f, shift, 0f, 0f, 1f, 0f, shift, 0f, 0f, 0f, 1f, 0f)))
         return m.array
     }
 
@@ -196,7 +212,7 @@ object ImageEdits {
 
     /** Colour matrix scaling contrast around mid-grey (1 unchanged). */
     private fun contrast(c: Float): ColorMatrix {
-        val t = (1f - c) * 128f
+        val t = (1f - c) * MID_GREY
         return ColorMatrix(floatArrayOf(c, 0f, 0f, 0f, t, 0f, c, 0f, 0f, t, 0f, 0f, c, 0f, t, 0f, 0f, 0f, 1f, 0f))
     }
 
@@ -212,10 +228,11 @@ object ImageEdits {
                 if (e.rotation != 0) postRotate(e.rotation.toFloat(), src.width / 2f, src.height / 2f)
             }
         val oriented = Bitmap.createBitmap(src, 0, 0, src.width, src.height, geometry, true)
-        val (l, t, w, h) = e.crop.pixelRect(oriented.width, oriented.height)
-        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        // pixelRect returns left, top, width, height.
+        val rect = e.crop.pixelRect(oriented.width, oriented.height)
+        val out = Bitmap.createBitmap(rect[2], rect[3], Bitmap.Config.ARGB_8888)
         val paint = Paint(Paint.FILTER_BITMAP_FLAG).apply { colorFilter = ColorMatrixColorFilter(colorMatrix(e)) }
-        Canvas(out).drawBitmap(oriented, -l.toFloat(), -t.toFloat(), paint)
+        Canvas(out).drawBitmap(oriented, -rect[0].toFloat(), -rect[1].toFloat(), paint)
         if (oriented !== src) oriented.recycle()
         return out
     }

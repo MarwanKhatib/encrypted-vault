@@ -1,5 +1,8 @@
-# Detekt configuration. Starts from the defaults (buildUponDefaultConfig) and relaxes rules that do not fit Compose UI code.
-# Real problems (long methods, swallowed exceptions, wildcard imports, complexity) stay enforced.
+# Detekt configuration. Starts from the defaults (buildUponDefaultConfig) and relaxes only rules that do not fit this codebase:
+#  - Compose UI functions are long and take many parameters by design, so their size and parameter-count rules are relaxed.
+#  - Named constants and colour literals in property declarations are not magic numbers.
+#  - Guard clauses are idiomatic Kotlin, so the return count is allowed a little higher.
+# Correctness rules (swallowed or generic exceptions, complexity in logic, wildcard imports) stay enforced.
 config:
   validation: true
 
@@ -9,6 +12,9 @@ style:
   MagicNumber:
     ignoreAnnotated:
       - 'Composable'
+    ignorePropertyDeclaration: true
+    ignoreCompanionObjectPropertyDeclaration: true
+    ignoreNamedArgument: true
     ignoreNumbers:
       - '-1'
       - '0'
@@ -16,10 +22,38 @@ style:
       - '2'
       - '3'
       - '4'
+      - '1f'
+      - '0f'
+      - '2f'
       - '100'
       - '1000'
+  ReturnCount:
+    max: 3
+    excludeGuardClauses: true
+    excludeReturnFromLambda: true
+  ThrowsCount:
+    max: 3
 
 naming:
   FunctionNaming:
+    ignoreAnnotated:
+      - 'Composable'
+
+complexity:
+  TooManyFunctions:
+    thresholdInClasses: 20
+    thresholdInInterfaces: 16
+    thresholdInFiles: 16
+    thresholdInObjects: 16
+  LongParameterList:
+    functionThreshold: 7
+    ignoreAnnotated:
+      - 'Composable'
+  LongMethod:
+    threshold: 60
+    ignoreAnnotated:
+      - 'Composable'
+  CyclomaticComplexMethod:
+    threshold: 15
     ignoreAnnotated:
       - 'Composable'

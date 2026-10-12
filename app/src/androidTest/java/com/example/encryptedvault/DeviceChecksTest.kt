@@ -164,10 +164,10 @@ class DeviceChecksTest {
         keys.setUp(pin, bip39)
         val wrong = "111111"
         assertNull("the wrong PIN is refused", keys.unlockWithPin(wrong.toCharArray()))
-        repeat(10) { keys.recordFailure() }
-        assertEquals("all ten failures are counted", 10, keys.failCount())
-        assertTrue("the vault is locked out after ten failures", keys.lockedForMs() > 0)
-        keys.resetFailures()
-        assertEquals("a correct unlock clears the lockout", 0L, keys.lockedForMs())
+        repeat(10) { keys.attempts.recordFailure() }
+        assertEquals("all ten failures are counted", 10, keys.attempts.failCount())
+        assertTrue("the vault is locked out after ten failures", keys.attempts.lockedForMs() > 0)
+        keys.attempts.resetFailures()
+        assertEquals("a correct unlock clears the lockout", 0L, keys.attempts.lockedForMs())
     }
 }

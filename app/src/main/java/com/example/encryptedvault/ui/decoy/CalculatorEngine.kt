@@ -8,6 +8,8 @@ import kotlin.math.abs
  * An expression is a plain string such as `12+3×4`; `%` is a postfix "divide by 100"; `−` is a real minus sign.
  */
 object CalculatorEngine {
+    /** Results at or above this magnitude are shown in scientific notation rather than as whole numbers. */
+    private const val EXACT_INTEGER_LIMIT = 1e15
     private const val PLUS = '+'
     private const val MINUS = '−'
     private const val TIMES = '×'
@@ -43,40 +45,53 @@ object CalculatorEngine {
         val tokens = tokenize(expression) ?: return null
         val output = ArrayDeque<Double>()
         val operators = ArrayDeque<Char>()
-
-        /** Pops one operator and two operands and pushes the result. False on a malformed stack or a division by zero. */
-        fun apply(): Boolean {
-            val op = operators.removeLastOrNull() ?: return false
-            val b = output.removeLastOrNull() ?: return false
-            val a = output.removeLastOrNull() ?: return false
-            output.addLast(
-                when (op) {
-                    PLUS -> a + b
-                    MINUS -> a - b
-                    TIMES -> a * b
-                    else -> if (b == 0.0) return false else a / b
-                },
-            )
-            return true
-        }
         for (token in tokens) {
-            if (token is Double) {
-                output.addLast(token)
-            } else {
-                val op = token as Char
-                while (operators.isNotEmpty() && precedence(operators.last()) >= precedence(op)) if (!apply()) return null
-                operators.addLast(op)
-            }
+            val accepted =
+                when (token) {
+                    is Double -> true.also { output.addLast(token) }
+                    else -> pushOperator(token as Char, output, operators)
+                }
+            if (!accepted) return null
         }
-        while (operators.isNotEmpty()) if (!apply()) return null
+        while (operators.isNotEmpty()) if (!reduce(output, operators)) return null
         return output.singleOrNull()
+    }
+
+    /** Shunting-yard step: applies pending operators of equal or higher precedence, then pushes [op]. False on a malformed expression. */
+    private fun pushOperator(
+        op: Char,
+        output: ArrayDeque<Double>,
+        operators: ArrayDeque<Char>,
+    ): Boolean {
+        while (operators.isNotEmpty() && precedence(operators.last()) >= precedence(op)) if (!reduce(output, operators)) return false
+        operators.addLast(op)
+        return true
+    }
+
+    /** Pops one operator and two operands and pushes the result. False on a malformed stack or a division by zero. */
+    private fun reduce(
+        output: ArrayDeque<Double>,
+        operators: ArrayDeque<Char>,
+    ): Boolean {
+        val op = operators.removeLastOrNull() ?: return false
+        val b = output.removeLastOrNull() ?: return false
+        val a = output.removeLastOrNull() ?: return false
+        val result =
+            when (op) {
+                PLUS -> a + b
+                MINUS -> a - b
+                TIMES -> a * b
+                else -> if (b == 0.0) return false else a / b
+            }
+        output.addLast(result)
+        return true
     }
 
     /** `7`, `0.5`, `1234567`, `3.3333333333`; no trailing zeros and no exponent for everyday values. */
     fun format(value: Double): String =
         when {
             value.isNaN() || value.isInfinite() -> "Error"
-            value == Math.rint(value) && abs(value) < 1e15 -> value.toLong().toString()
+            value == Math.rint(value) && abs(value) < EXACT_INTEGER_LIMIT -> value.toLong().toString()
             else ->
                 String
                     .format(Locale.US, "%.10f", value)
@@ -143,27 +158,39 @@ object CalculatorEngine {
         val tokens = mutableListOf<Any>()
         var i = 0
         while (i < expression.length) {
-            val c = expression[i]
-            val expectsNumber = tokens.isEmpty() || tokens.last() is Char
-            when {
-                c == MINUS && expectsNumber -> { // unary minus belongs to the number that follows
-                    val (value, next) = readNumber(expression, i + 1) ?: return null
-                    tokens += -value
-                    i = next
-                }
-                c.isDigit() || c == '.' -> {
-                    val (value, next) = readNumber(expression, i) ?: return null
-                    tokens += value
-                    i = next
-                }
-                c in OPERATORS && !expectsNumber -> {
-                    tokens += c
-                    i++
-                }
-                else -> return null
-            }
+            i = scanToken(expression, i, tokens) ?: return null
         }
         return if (tokens.last() is Double) tokens else null
+    }
+
+    /**
+     * Reads the single token that starts at [start] and appends it to [tokens]. Returns the index after it, or null when the
+     * character cannot start a token in this position. Unary minus belongs to the number that follows it.
+     */
+    private fun scanToken(
+        expression: String,
+        start: Int,
+        tokens: MutableList<Any>,
+    ): Int? {
+        val c = expression[start]
+        val expectsNumber = tokens.isEmpty() || tokens.last() is Char
+        return when {
+            c == MINUS && expectsNumber ->
+                readNumber(expression, start + 1)?.let { (value, next) ->
+                    tokens += -value
+                    next
+                }
+            c.isDigit() || c == '.' ->
+                readNumber(expression, start)?.let { (value, next) ->
+                    tokens += value
+                    next
+                }
+            c in OPERATORS && !expectsNumber -> {
+                tokens += c
+                start + 1
+            }
+            else -> null
+        }
     }
 
     /** Reads `123.45` (optionally followed by `%`) starting at [start]; returns the value and the next index. */

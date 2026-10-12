@@ -12,6 +12,7 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.IOException
 import java.nio.ByteBuffer
+import java.nio.channels.SeekableByteChannel
 import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.SecretKey
@@ -152,16 +153,21 @@ class VaultFilesTest {
         VaultFiles.openSeekable(key, file).use { ch ->
             for (offset in listOf(0, 1, VaultFiles.SEGMENT_BYTES - 5, VaultFiles.SEGMENT_BYTES, VaultFiles.SEGMENT_BYTES * 2 + 123, plain.size - 20)) {
                 ch.position(offset.toLong())
-                val buf = ByteBuffer.allocate(20)
-                var read = 0
-                while (read < 20) {
-                    val n = ch.read(buf)
-                    if (n < 0) break
-                    read += n
-                }
-                assertArrayEquals("offset $offset", plain.copyOfRange(offset, offset + 20), buf.array())
+                assertArrayEquals("offset $offset", plain.copyOfRange(offset, offset + 20), readFully(ch, 20))
             }
         }
+    }
+
+    /** Reads up to [count] bytes from [ch] at its current position, stopping early only at end of stream. */
+    private fun readFully(
+        ch: SeekableByteChannel,
+        count: Int,
+    ): ByteArray {
+        val buf = ByteBuffer.allocate(count)
+        while (buf.hasRemaining()) {
+            if (ch.read(buf) < 0) break
+        }
+        return buf.array()
     }
 
     @Test fun seekableChannelRefusesLegacyFiles() {

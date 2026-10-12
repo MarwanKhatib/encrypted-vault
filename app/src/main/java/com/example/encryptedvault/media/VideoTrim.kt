@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
@@ -14,11 +15,12 @@ import com.example.encryptedvault.VaultApp
 import com.example.encryptedvault.crypto.VaultFiles
 import com.example.encryptedvault.data.VaultItem
 import com.example.encryptedvault.data.VaultStorage
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
+import java.security.GeneralSecurityException
 import kotlin.coroutines.resume
 
 private const val TRIM_DIR = "trim"
@@ -71,24 +73,29 @@ suspend fun stageTrim(
 ): MediaTransfer.StagedFile? {
     val key = VaultApp.sessionKey ?: return null
     val source = File(File(context.cacheDir, TRIM_DIR).apply { mkdirs() }, "${System.nanoTime()}.${item.name.substringAfterLast('.', "mp4")}")
-    try {
+    return try {
         withContext(Dispatchers.IO) {
             VaultFiles.decryptStream(key, VaultStorage.content(context, item.hash)).use { input -> source.outputStream().use { input.copyTo(it) } }
         }
         val output = File(File(context.cacheDir, MediaTransfer.IMPORT_DIR).apply { mkdirs() }, "${System.nanoTime()}.mp4")
-        if (!exportTrim(context, source, range, output)) {
+        if (exportTrim(context, source, range, output)) {
+            MediaTransfer.StagedFile(output.path, SourceInfo(trimmedName(item.name), item.sourceFolder, item.takenAt))
+        } else {
             output.delete()
-            return null
+            null
         }
-        return MediaTransfer.StagedFile(output.path, SourceInfo(trimmedName(item.name), item.sourceFolder, item.takenAt))
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        return null
+    } catch (e: IOException) {
+        Log.w(TAG, "trim failed (I/O): ${e.javaClass.simpleName}")
+        null
+    } catch (e: GeneralSecurityException) {
+        Log.w(TAG, "trim failed (decryption): ${e.javaClass.simpleName}")
+        null
     } finally {
         source.delete()
     }
 }
+
+private const val TAG = "VideoTrim"
 
 /** Writes the [range] of [source] to [output] with Media3 Transformer. Transformer must run on a Looper thread, so this hops to main. */
 private suspend fun exportTrim(

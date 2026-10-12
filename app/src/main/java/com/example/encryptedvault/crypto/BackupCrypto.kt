@@ -34,6 +34,7 @@ object BackupCrypto {
     private const val TAG_BITS = 128
     private const val TAG_BYTES = TAG_BITS / 8
     private const val AES_BITS = 256
+    private const val BYTE_MASK = 0xFF
 
     /** Writes the header to [out] and returns a stream that encrypts what is written to it. Closing it writes the final chunk and closes [out]. */
     fun encrypting(
@@ -179,7 +180,7 @@ object BackupCrypto {
 
         override fun read(): Int {
             if (!fill()) return -1
-            return chunk[position++].toInt() and 0xFF
+            return chunk[position++].toInt() and BYTE_MASK
         }
 
         override fun read(
@@ -204,28 +205,43 @@ object BackupCrypto {
         }
 
         private fun openChunk() {
-            val last =
-                when (input.readByte().toInt()) {
-                    0 -> false
-                    1 -> true
-                    else -> throw IOException("Corrupt backup chunk")
-                }
-            val length = input.readInt()
-            if (length !in TAG_BYTES..CHUNK_BYTES + TAG_BYTES) throw IOException("Corrupt backup chunk length")
-            val sealed = ByteArray(length)
-            input.readFully(sealed)
-            chunk =
-                try {
-                    cipher(Cipher.DECRYPT_MODE, key, baseNonce, index, last).doFinal(sealed)
-                } catch (e: GeneralSecurityException) {
-                    throw IOException("Wrong passphrase or corrupted backup", e)
-                }
+            val last = readFinalFlag()
+            chunk = decryptChunk(readSealedChunk(), last)
             position = 0
             index++
-            if (last) {
-                finished = true
-                if (input.read() != -1) throw IOException("Unexpected data after the end of the backup")
+            if (last) finishStream()
+        }
+
+        /** Reads the one-byte final-chunk flag. Anything other than 0 or 1 means the file is corrupt. */
+        private fun readFinalFlag(): Boolean =
+            when (input.readByte().toInt()) {
+                0 -> false
+                1 -> true
+                else -> throw IOException("Corrupt backup chunk")
             }
+
+        /** Reads a length-prefixed sealed chunk. The length must be between one tag and one full chunk plus a tag. */
+        private fun readSealedChunk(): ByteArray {
+            val length = input.readInt()
+            if (length !in TAG_BYTES..CHUNK_BYTES + TAG_BYTES) throw IOException("Corrupt backup chunk length")
+            return ByteArray(length).also { input.readFully(it) }
+        }
+
+        /** Authenticates and decrypts one chunk; a wrong key or tampering surfaces as a single IOException. */
+        private fun decryptChunk(
+            sealed: ByteArray,
+            last: Boolean,
+        ): ByteArray =
+            try {
+                cipher(Cipher.DECRYPT_MODE, key, baseNonce, index, last).doFinal(sealed)
+            } catch (e: GeneralSecurityException) {
+                throw IOException("Wrong passphrase or corrupted backup", e)
+            }
+
+        /** After the final chunk the stream must end; trailing bytes mean the file was extended. */
+        private fun finishStream() {
+            finished = true
+            if (input.read() != -1) throw IOException("Unexpected data after the end of the backup")
         }
     }
 }

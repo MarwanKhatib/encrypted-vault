@@ -7,6 +7,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.encryptedvault.crypto.Bip39
 import com.example.encryptedvault.crypto.KeyHierarchy
 import com.example.encryptedvault.crypto.PinVerifier
+import com.example.encryptedvault.crypto.UnlockAttempts
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -157,13 +158,13 @@ class KeyHierarchyTest {
 
     @Test fun lockoutStartsAfterTheFreeTriesAndResetsOnSuccess() {
         keys.setUp(pin, bip39)
-        repeat(KeyHierarchy.FREE_TRIES - 1) { keys.recordFailure() }
-        assertEquals(0L, keys.lockedForMs())
-        keys.recordFailure()
-        assertTrue(keys.lockedForMs() > 0)
-        keys.resetFailures()
-        assertEquals(0L, keys.lockedForMs())
-        assertEquals(0, keys.failCount())
+        repeat(UnlockAttempts.FREE_TRIES - 1) { keys.attempts.recordFailure() }
+        assertEquals(0L, keys.attempts.lockedForMs())
+        keys.attempts.recordFailure()
+        assertTrue(keys.attempts.lockedForMs() > 0)
+        keys.attempts.resetFailures()
+        assertEquals(0L, keys.attempts.lockedForMs())
+        assertEquals(0, keys.attempts.failCount())
     }
 
     // ---- Crypto-erase ----

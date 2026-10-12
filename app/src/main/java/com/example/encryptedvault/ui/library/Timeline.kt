@@ -57,6 +57,12 @@ enum class RangePreset(
 
 /** Pure date logic for the library; no Android dependencies so it can be unit-tested directly. */
 object Timeline {
+    /** Days to step back for the 7-day preset, counting today. */
+    private const val WEEK_SPAN_DAYS = 6L
+
+    /** Days to step back for the 30-day preset, counting today. */
+    private const val MONTH_SPAN_DAYS = 29L
+
     /** Items taken at most this many days apart belong to the same event. */
     const val EVENT_GAP_DAYS = 2L
 
@@ -70,8 +76,8 @@ object Timeline {
         val start =
             when (preset) {
                 RangePreset.TODAY -> today
-                RangePreset.LAST_7_DAYS -> today.minusDays(6)
-                RangePreset.LAST_30_DAYS -> today.minusDays(29)
+                RangePreset.LAST_7_DAYS -> today.minusDays(WEEK_SPAN_DAYS)
+                RangePreset.LAST_30_DAYS -> today.minusDays(MONTH_SPAN_DAYS)
                 RangePreset.THIS_YEAR -> LocalDate.of(today.year, 1, 1)
                 RangePreset.ANY, RangePreset.CUSTOM -> return null
             }
