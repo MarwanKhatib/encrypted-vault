@@ -207,6 +207,14 @@ fun SettingsScreen(
                 HorizontalDivider()
                 SwitchRow("Remove location when sharing", "Strips GPS EXIF from the temporary shared copy", settings.stripExif) { settings.putStripExif(it) }
                 HorizontalDivider()
+                Text("Lock after idle", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Locks when there is no touch or key input for the chosen time. Off keeps the instant lock only.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Choices(listOf("Off" to 0, "1 min" to 1, "5 min" to 5, "15 min" to 15), settings.idleLockMinutes) { settings.putIdleLockMinutes(it) }
+                HorizontalDivider()
                 SwitchRow("Offer to delete originals", "After import, ask Android to delete the unencrypted originals", settings.offerDeleteOriginals) {
                     settings.putOfferDeleteOriginals(it)
                 }

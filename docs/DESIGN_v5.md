@@ -289,6 +289,7 @@ v1 listed "unit tests," "integration tests," "security tests" as headers with ex
 - [ ] Encrypt the same photo twice (tap button twice fast) → verify exactly one vault entry
 - [ ] Attempt 10 wrong PINs in a row → verify lockout/backoff actually triggers
 - [ ] Put phone in split-screen with vault open to a photo → verify auto-lock fires (Gap 6)
+- [ ] Set Settings → Privacy → Lock after idle to 1 min, leave the vault open without touching it → verify lock screen appears (ADR-010); then touch every ~30 s and verify it does not lock
 - [ ] Press recent-apps button with a photo open → verify thumbnail is blank/secured (Gap 6/v3-Gap5)
 - [ ] Share a photo to a test app → verify re-encryption completes AND temp cache file is actually gone (`ls` the cache dir manually)
 - [ ] Share a photo → inspect the shared file's EXIF with a separate tool → verify GPS stripped if toggle was on (Gap 10)

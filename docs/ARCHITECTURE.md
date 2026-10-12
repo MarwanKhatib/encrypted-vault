@@ -5,7 +5,7 @@ Package root: `com.example.encryptedvault`. Dependencies point downwards: `ui` �
 | Package | Responsibility | Start reading |
 |---|---|---|
 | `crypto` | Key hierarchy (PIN / fingerprint / recovery phrase → master key), unlock lockout, streaming AES-GCM files, passphrase-encrypted backup stream | `KeyHierarchy`, `UnlockAttempts`, `VaultFiles`, `BackupCrypto` |
-| `security` | In-memory session (lock/unlock), biometric prompt helper, panic wipe, integrity checks | `SessionManager`, `Biometric`, `PanicWipe` |
+| `security` | In-memory session (lock/unlock), idle timer for opt-in auto-lock, biometric prompt helper, panic wipe, integrity checks | `SessionManager`, `IdleLock`, `Biometric`, `PanicWipe` |
 | `data` | Room database (schema v5), encrypted metadata codec, `VaultRepository` (the only place rows become `VaultItem`s), on-disk layout | `VaultRepository`, `VaultDatabase`, `VaultStorage` |
 | `media` | Plaintext handling: thumbnails, image edits, video trim, playback data source, restore/share/import staging | `MediaTransfer`, `ImageEdits`, `VideoTrim`, `VaultPlayer`, `RestoreTarget` |
 | `backup` | Backup export and restore, and the record wire format | `VaultBackup`, `BackupRecords` |
@@ -28,7 +28,7 @@ Pure logic used by the screens (and covered by unit tests): `Timeline` (grouping
 - **Playback:** `VaultPlayer.buildVaultPlayer` reads through `VaultDataSource`, which decrypts one segment at a time (`vaultIo` helper).
 - **Restore to gallery:** `ItemActions.requestRestore` → dialog → `MediaTransfer.restoreToGallery` (target from `RestoreTarget.resolve`, with `Restored/<folder>` as fallback) → optionally `VaultRepository.deleteForever`.
 - **Backup:** `VaultBackup.export` writes header and records through `BackupCrypto.encrypting` (PBKDF2 key, 1 MiB AES-GCM chunks). Each record is `BackupRecords.write` followed by the item bytes. `VaultBackup.restore` reads through `BackupCrypto.decrypting`, skips items whose hash is already in the vault, and reports a `RestoreReport`.
-- **Lock:** `MainActivity.onStop` calls `SessionManager.consumeStopLock`, then `lockNow`, which locks the session and runs `MediaTransfer.sweepTemporaryPlaintext` with `olderThanMs = 0`. The multi-window and configuration-change callbacks also lock.
+- **Lock:** `MainActivity.onStop` calls `SessionManager.consumeStopLock`, then `lockNow`, which locks the session and runs `MediaTransfer.sweepTemporaryPlaintext` with `olderThanMs = 0`. The multi-window and configuration-change callbacks also lock. The optional idle lock (ADR-010) is a once-a-minute check while the activity is resumed; touch and key input reset it through `IdleLock`, and it locks only when `Settings → Privacy → Lock after idle` is set and the session is unlocked.
 
 ## Files on disk (`files/vault/`, names are the plaintext SHA-256)
 
@@ -39,7 +39,7 @@ Pure logic used by the screens (and covered by unit tests): `Timeline` (grouping
 
 ## Build and quality gates
 
-- `./gradlew testDebugUnitTest`: JVM unit tests (181 at last run).
+- `./gradlew testDebugUnitTest`: JVM unit tests (185 at last run).
 - `./gradlew ktlintCheck detekt`: ktlint 1.3.1 (official style, `.editorconfig` max line length 160, Composable naming ignored) and detekt 1.23.6 with `config/detekt/detekt.yml`. Both must report zero findings.
 - Detekt relaxes LongMethod, CyclomaticComplexMethod, LongParameterList, FunctionNaming and MagicNumber for Composables. `TooManyFunctions` thresholds: classes 20, interfaces 16, files 16, objects 16. `KeyHierarchy` carries a deliberate `@Suppress("TooManyFunctions")`.
 - Public declarations need KDoc (detekt `UndocumentedPublicClass` and `UndocumentedPublicFunction` are active).
@@ -47,7 +47,7 @@ Pure logic used by the screens (and covered by unit tests): `Timeline` (grouping
 
 ## Test map
 
-- Unit (`app/src/test`): `BackupCryptoTest`, `BackupRecordsTest`, `Bip39Test`, `LockoutTimingTest`, `PinPolicyTest`, `PinVerifierTest`, `VaultFilesTest`, `PhotoMetadataCodecTest`, `ImageEditsTest`, `MediaTransferMimeTest`, `RestoreTargetsTest`, `VideoTrimTest`, `IntegrityTest`, `PanicWipeFilesTest`, `CollectionsTest`, `FormattersTest`, `CalculatorEngineTest`, `ForYouTest`, `TimelineTest`, `SearchMatcherTest`, `ImportBatchesTest`.
+- Unit (`app/src/test`): `BackupCryptoTest`, `BackupRecordsTest`, `Bip39Test`, `LockoutTimingTest`, `PinPolicyTest`, `PinVerifierTest`, `VaultFilesTest`, `PhotoMetadataCodecTest`, `ImageEditsTest`, `MediaTransferMimeTest`, `RestoreTargetsTest`, `VideoTrimTest`, `IdleLockTest`, `IntegrityTest`, `PanicWipeFilesTest`, `CollectionsTest`, `FormattersTest`, `CalculatorEngineTest`, `ForYouTest`, `TimelineTest`, `SearchMatcherTest`, `ImportBatchesTest`.
 - Instrumented (`app/src/androidTest`, 48 tests on the emulator): `DatabaseMigrationTest`, `DeviceChecksTest`, `ImportFormatsTest`, `KeyHierarchyTest`, `KillMidBatchTest` (two kill-drill phases skip unless `killDrill=true`), `PanicWipeTest`, `TrimAndBackupFlowTest`, `VaultDataSourceTest`.
 
 ## Rules that keep it safe

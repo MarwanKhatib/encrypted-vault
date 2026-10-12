@@ -31,7 +31,7 @@ Files over 500 MB are skipped.
 - **Delete originals:** after an import, the app can ask Android to delete the phone's copies. Copies in Google Photos or another cloud backup are not removed.
 - **Backup:** Settings → Backup writes every item, with albums and captions, to one file encrypted with a passphrase you choose. Restore works on any device, and items already in the vault are skipped. The app never sends the file anywhere; you choose where it is saved.
 - **Unlock:** a PIN pad (6–12 digits; a physical keyboard works too), fingerprint through the Keystore, a 24-word recovery phrase, lockout after wrong PINs, and an optional duress PIN that erases everything.
-- **Privacy:** screenshots and the recents preview are always blocked, and the vault locks as soon as the app leaves the screen. Multi-window also locks it. File names, folders, captions, and album titles are only stored encrypted.
+- **Privacy:** screenshots and the recents preview are always blocked, and the vault locks as soon as the app leaves the screen. Multi-window also locks it. Optional idle lock (Settings → Privacy, off by default) locks after 1, 5 or 15 minutes without touch or key input. File names, folders, captions, and album titles are only stored encrypted.
 - **Disguise:** the launcher icon can be switched to Weather, Calculator, Notes, or Clock.
 
 ## Build and run

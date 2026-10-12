@@ -22,6 +22,10 @@ class AppSettings(
     var offerDeleteOriginals by mutableStateOf(prefs.getBoolean("offer_delete", true))
         private set
 
+    /** Minutes of no input before the vault locks; 0 (the default) turns idle lock off (ADR-010). */
+    var idleLockMinutes by mutableIntStateOf(prefs.getInt("idle_lock_minutes", 0))
+        private set
+
     /** iPhone style: newest items at the bottom of the Library grid, opened scrolled to the end. */
     var newestAtBottom by mutableStateOf(prefs.getBoolean("newest_bottom", true))
         private set
@@ -48,6 +52,12 @@ class AppSettings(
     fun putOfferDeleteOriginals(v: Boolean) {
         offerDeleteOriginals = v
         prefs.edit().putBoolean("offer_delete", v).apply()
+    }
+
+    /** Stores the idle-lock timeout in minutes; 0 turns it off. */
+    fun putIdleLockMinutes(v: Int) {
+        idleLockMinutes = v
+        prefs.edit().putInt("idle_lock_minutes", v).apply()
     }
 
     /** Stores whether the Library puts the newest items at the bottom, like iOS. */
