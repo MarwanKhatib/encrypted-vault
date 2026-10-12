@@ -26,7 +26,8 @@ object BackupCrypto {
     const val MIN_PASSPHRASE_LENGTH = 12
 
     private val MAGIC = "EVBK".toByteArray(Charsets.US_ASCII)
-    private const val VERSION: Byte = 1
+    private const val VERSION: Byte = 2
+    private const val OLDEST_READABLE_VERSION = 1
     private const val SALT_BYTES = 16
     private const val NONCE_BYTES = 12
     private const val ITERATIONS = 600_000
@@ -54,22 +55,28 @@ object BackupCrypto {
         return EncryptingStream(data, deriveKey(passphrase, salt, ITERATIONS), baseNonce)
     }
 
-    /** Reads and checks the header of [input] and returns a stream of the decrypted body. Any failure throws [IOException]. */
+    /** Reads and checks the header of [input]; the result has the header's format version and the decrypted body. Any failure throws [IOException]. */
     fun decrypting(
         input: InputStream,
         passphrase: CharArray,
-    ): InputStream {
+    ): Opened {
         val data = DataInputStream(input)
         val magic = ByteArray(MAGIC.size).also { data.readFully(it) }
         if (!magic.contentEquals(MAGIC)) throw IOException("Not a vault backup file")
-        val version = data.readByte()
-        if (version != VERSION) throw IOException("Unsupported backup version $version")
+        val version = data.readByte().toInt()
+        if (version !in OLDEST_READABLE_VERSION..VERSION) throw IOException("Unsupported backup version $version")
         val salt = ByteArray(SALT_BYTES).also { data.readFully(it) }
         val baseNonce = ByteArray(NONCE_BYTES).also { data.readFully(it) }
         val iterations = data.readInt()
         if (iterations !in 1..ITERATIONS * 4) throw IOException("Implausible iteration count")
-        return DecryptingStream(data, deriveKey(passphrase, salt, iterations), baseNonce)
+        return Opened(version, DecryptingStream(data, deriveKey(passphrase, salt, iterations), baseNonce))
     }
+
+    /** A decrypted backup: the format [version] from its header and the stream of its body. */
+    class Opened internal constructor(
+        val version: Int,
+        val body: InputStream,
+    )
 
     /** Derives the AES-256 key from the passphrase with PBKDF2-HMAC-SHA256. */
     private fun deriveKey(

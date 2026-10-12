@@ -75,8 +75,11 @@ class VaultRepository private constructor(
         caption: String,
     ) = updateMetadata(itemId) { it.copy(caption = caption.trim()) }
 
-    /** Moves items to Recently Deleted (recoverable for [TRASH_RETENTION_DAYS] days). */
-    suspend fun moveToTrash(ids: List<Long>) = db.photoDao().setDeletedAt(ids, System.currentTimeMillis())
+    /** Moves items to Recently Deleted (recoverable for [TRASH_RETENTION_DAYS] days). [at] is the trash time; restores pass the original one. */
+    suspend fun moveToTrash(
+        ids: List<Long>,
+        at: Long = System.currentTimeMillis(),
+    ) = db.photoDao().setDeletedAt(ids, at)
 
     /** Brings items back from Recently Deleted. */
     suspend fun restoreFromTrash(ids: List<Long>) = db.photoDao().setDeletedAt(ids, 0)

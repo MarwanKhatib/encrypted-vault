@@ -26,7 +26,7 @@ class BackupRecordsTest {
         height = 3024,
         favorite = true,
         hidden = false,
-        trashed = true,
+        trashedAt = 1_700_000_000_000L,
         name = name,
         folder = folder,
         caption = "Sunset, ünïcode",

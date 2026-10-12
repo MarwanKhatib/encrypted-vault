@@ -72,7 +72,7 @@ Back up the keystore **and** `keystore.properties`. Without both, you cannot shi
 - **Formats:** RAW and DNG are not supported. Video containers other than MP4 depend on the phone's codecs.
 - **Large videos** play from encrypted storage in segments; memory use stays at about one segment, so very large files are not loaded whole. Phones with very little memory may still stutter on 4K.
 - **Edited copies** are JPEG and carry no EXIF metadata. Edits are made from a downsampled decode (about 2400 px on the long edge), so the saved copy is smaller than a full-resolution original.
-- **Restore** gives trashed items a new 30-day window instead of their original date.
+- **Restore** keeps each trashed item's original trash time for backups made in format v2 (this version). Backups made before, in format v1, only recorded that an item was trashed, so those items get a fresh 30-day window.
 - **Restored dates:** the media scanner may re-derive the date taken; file name and folder are kept.
 - **Disguise icons** change the launcher name and picture only. The app still opens the vault; there is no separate fake calculator screen.
 - **Temporary files** for sharing and playback are removed when the vault locks. Leftovers from a crash are removed at the next start if they are over 10 minutes old. Files are not removed when the other app finishes with them.

@@ -1,6 +1,7 @@
 package com.example.encryptedvault.crypto
 
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.io.ByteArrayInputStream
@@ -27,7 +28,7 @@ class BackupCryptoTest {
     private fun decrypt(
         bytes: ByteArray,
         passphrase: CharArray = pass,
-    ): ByteArray = BackupCrypto.decrypting(ByteArrayInputStream(bytes), passphrase).use { it.readBytes() }
+    ): ByteArray = BackupCrypto.decrypting(ByteArrayInputStream(bytes), passphrase).body.use { it.readBytes() }
 
     private fun payload(size: Int) = ByteArray(size).also { Random(7).nextBytes(it) }
 
@@ -81,7 +82,14 @@ class BackupCryptoTest {
         val bytes = encrypt(payload(100))
         bytes[0] = 'X'.code.toByte()
         assertThrows(IOException::class.java) { decrypt(bytes) }
-        val wrongVersion = encrypt(payload(100)).also { it[4] = 2 }
+        val wrongVersion = encrypt(payload(100)).also { it[4] = 3 }
         assertThrows(IOException::class.java) { decrypt(wrongVersion) }
+    }
+
+    @Test fun olderVersionHeaderIsStillReadable() {
+        val bytes = encrypt(payload(100)).also { it[4] = 1 }
+        val opened = BackupCrypto.decrypting(ByteArrayInputStream(bytes), pass)
+        assertEquals(1, opened.version)
+        assertEquals(100, opened.body.readBytes().size)
     }
 }

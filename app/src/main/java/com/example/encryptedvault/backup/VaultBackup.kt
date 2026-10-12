@@ -73,9 +73,10 @@ object VaultBackup {
         var skipped = 0
         var failed = 0
         withContext(Dispatchers.IO) {
-            DataInputStream(BackupCrypto.decrypting(input, passphrase)).use { data ->
+            val opened = BackupCrypto.decrypting(input, passphrase)
+            DataInputStream(opened.body).use { data ->
                 repeat(BackupRecords.readCount(data)) {
-                    val record = BackupRecords.read(data)
+                    val record = BackupRecords.read(data, opened.version)
                     // The content must be consumed even when the item is skipped or fails, or the rest of the stream is misread.
                     when {
                         dao.findCompleteByHash(record.hash) != null -> {
@@ -110,7 +111,7 @@ object VaultBackup {
             height = height,
             favorite = isFavorite,
             hidden = isHidden,
-            trashed = isTrashed,
+            trashedAt = trashedAt,
             name = name,
             folder = sourceFolder,
             caption = caption,
@@ -157,7 +158,7 @@ object VaultBackup {
         if (record.favorite) repository.setFavorite(listOf(id), true)
         if (record.hidden) repository.setHidden(listOf(id), true)
         if (record.caption.isNotEmpty()) repository.setCaption(id, record.caption)
-        if (record.trashed) repository.moveToTrash(listOf(id))
+        record.trashedAt?.let { repository.moveToTrash(listOf(id), it) }
         record.albums.forEach { title -> repository.addToAlbum(albumIdFor(repository, title), listOf(id)) }
     }
 
