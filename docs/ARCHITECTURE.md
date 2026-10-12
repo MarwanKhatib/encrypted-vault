@@ -11,7 +11,7 @@ Package root: `com.example.encryptedvault`. Dependencies point downwards: `ui` â
 | `backup` | Backup export and restore, and the record wire format | `VaultBackup`, `BackupRecords` |
 | `work` | Background import: `ImportWorker` encrypts staged files in budgeted batches | `ImportWorker` |
 | `appicon` | Launcher alias switching (disguises) | `AppIcon.kt` |
-| `ui/*` | Compose screens, one sub-package per feature; `ui/common` has shared widgets and item actions | `ui/VaultRoot.kt`, `ui/MainScaffold.kt` |
+| `ui/*` | Compose screens, one sub-package per feature; `ui/common` has shared widgets and item actions; `ui/theme` holds the cyber palette (`Theme.kt`) and the type scale (`Type.kt`, system fonts only, see ADR-011) | `ui/VaultRoot.kt`, `ui/MainScaffold.kt`, `ui/theme/Theme.kt` |
 
 ## UI map
 
@@ -36,6 +36,13 @@ Pure logic used by the screens (and covered by unit tests): `Timeline` (grouping
 - `<hash>.thumb.enc`: encrypted thumbnail.
 - Metadata (name, folder, caption, albums, flags) is in the DB column `photos.metaEnc`, encrypted by `PhotoMetadataCodec` (version 4).
 - Plaintext temp files live only in `cache/{import,share,play}`. Lock removes all of them; app start removes leftovers older than 10 minutes. `PanicWipe` clears the cache directory.
+
+## Theme and visuals
+
+- `ui/theme/Theme.kt`: colour tokens for dark and light, the shapes, and `VaultTheme(mode)`. Change colours here only.
+- `ui/theme/Type.kt`: type scale. Monospace for titles and labels, sans for body. System fonts only (no font files in the app; see ADR-011). To bundle a font, add it under `res/font/` and reference it in `Type.kt`.
+- Icons: `res/drawable/ic_icon_*.xml` (foreground vectors), `res/mipmap-anydpi/ic_launcher_*.xml` (adaptive icons), colours in `res/values/icon_colors.xml`.
+- Grid thumbnails: `ui/common/ThumbnailLoader.kt` caps concurrent decrypts at three (`Semaphore(3)`).
 
 ## Build and quality gates
 
