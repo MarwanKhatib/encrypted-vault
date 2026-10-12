@@ -79,6 +79,16 @@ Back up the keystore **and** `keystore.properties`. Without both, you cannot shi
 - **Lockout** is timed on the monotonic clock, so changing the device time does not shorten it. A lockout that spans a reboot is enforced in full again.
 - **Not in scope:** face recognition and grouping (removed, see ADR-005), video editing beyond trimming, markup, Live Photos, memories, map view, shared albums, and near-duplicate detection. Exact duplicates are blocked by content hash.
 
+### Open work
+
+Not built yet, in rough order:
+
+- **Intruder capture** (ADR-009): front-camera frame on wrong PIN. Proposed only; needs Camera2 and a real phone to verify.
+- **Location removal for HEIC and PNG copies** in plain export: only JPEG copies are cleaned (ADR-008).
+- **Library, Albums, and Viewer layout pass:** only the colours, type, and icons changed (ADR-011). No screen layout was redesigned.
+- **Device checks** not yet run on a phone: split-screen lock, recents preview, share flow, plain-export folder picker, scroll smoothness.
+- **RAW and DNG** decoding: no decoder available offline.
+
 ## Contributing
 
 - Every schema change needs a real `Migration` and a case in `DatabaseMigrationTest`. Never add `fallbackToDestructiveMigration()`.
