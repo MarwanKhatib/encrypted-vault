@@ -19,6 +19,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import android.view.KeyEvent
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
@@ -124,12 +131,49 @@ private fun Key(enabled: Boolean = true, onLongClick: (() -> Unit)? = null, onCl
     ) { content() }
 }
 
-/** 3x4 numeric keypad. [bottomLeft] slot is used for the fingerprint button. */
+/** Android key codes of the digits the PIN pad accepts, from the top row and the numpad. */
+private val PIN_DIGIT_CODES: Map<Int, Char> = buildMap {
+    for (d in 0..9) {
+        put(KeyEvent.KEYCODE_0 + d, '0' + d)
+        put(KeyEvent.KEYCODE_NUMPAD_0 + d, '0' + d)
+    }
+}
+
+/**
+ * 3x4 numeric keypad. [bottomLeft] slot is used for the fingerprint button.
+ * A physical keyboard works too: digits add, Backspace/Delete removes the last digit, Enter calls [onSubmit].
+ */
 @Composable
-private fun PinPad(pin: String, enabled: Boolean, onPin: (String) -> Unit, bottomLeft: (@Composable () -> Unit)? = null, maxLength: Int = MAX_PIN) {
+private fun PinPad(
+    pin: String,
+    enabled: Boolean,
+    onPin: (String) -> Unit,
+    bottomLeft: (@Composable () -> Unit)? = null,
+    maxLength: Int = MAX_PIN,
+    onSubmit: (() -> Unit)? = null,
+) {
     /** Appends a digit unless the entry already has [maxLength] digits. */
     fun add(d: Char) { if (pin.length < maxLength) onPin(pin + d) }
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(enabled) { if (enabled) focus.requestFocus() }
+    Column(
+        Modifier
+            .focusRequester(focus)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (!enabled || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val code = event.nativeKeyEvent.keyCode
+                val digit = PIN_DIGIT_CODES[code]
+                when {
+                    digit != null -> { add(digit); true }
+                    code == KeyEvent.KEYCODE_DEL || code == KeyEvent.KEYCODE_FORWARD_DEL -> { if (pin.isNotEmpty()) onPin(pin.dropLast(1)); true }
+                    code == KeyEvent.KEYCODE_ENTER || code == KeyEvent.KEYCODE_NUMPAD_ENTER -> { onSubmit?.invoke(); true }
+                    else -> false
+                }
+            },
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         listOf("123", "456", "789").forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 row.forEach { d -> Key(enabled = enabled, onClick = { add(d) }) { Text(d.toString(), style = MaterialTheme.typography.headlineSmall) } }
@@ -187,6 +231,26 @@ fun SetupScreen(keys: KeyHierarchy, bip39: Bip39, onDone: (List<String>) -> Unit
         SetupStep.PIN, SetupStep.CONFIRM -> {
             val confirming = step == SetupStep.CONFIRM
             val cur = if (confirming) confirm else pin
+
+            /** Checks the confirmation against the first PIN, then creates the vault. Runs from the button or as soon as the length matches. */
+            fun createVault() {
+                if (confirm != pin) { error = "PINs don't match"; confirm = ""; pin = ""; step = SetupStep.PIN; return }
+                busy = true
+                scope.launch {
+                    val words = withContext(Dispatchers.Default) {
+                        keys.setUp(pin.toCharArray(), bip39).also { VaultApp.sessionKey = keys.unlockWithPin(pin.toCharArray()) }
+                    }
+                    onDone(words)
+                }
+            }
+
+            /** The Next button and Enter: checks the first PIN, or creates the vault from the confirmation. */
+            fun nextStep() {
+                if (!confirming) {
+                    if (PinPolicy.isWeak(pin)) { error = "That PIN is too easy to guess"; pin = "" } else step = SetupStep.CONFIRM
+                } else createVault()
+            }
+
             Column(
                 Modifier.fillMaxSize().systemBarsPadding().verticalScroll(rememberScrollState()).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
@@ -196,24 +260,23 @@ fun SetupScreen(keys: KeyHierarchy, bip39: Bip39, onDone: (List<String>) -> Unit
                 Text("$MIN_PIN–$MAX_PIN digits", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 PinDots(cur.length)
                 Text(error ?: " ", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                PinPad(cur, !busy, { v -> error = null; if (confirming) confirm = v else pin = v })
-                Button(
-                    enabled = !busy && cur.length >= MIN_PIN, modifier = Modifier.fillMaxWidth().height(52.dp),
-                    onClick = {
-                        if (!confirming) {
-                            if (PinPolicy.isWeak(pin)) { error = "That PIN is too easy to guess"; pin = "" } else step = SetupStep.CONFIRM
-                        }
-                        else if (confirm != pin) { error = "PINs don't match"; confirm = ""; pin = ""; step = SetupStep.PIN }
+                PinPad(
+                    cur, !busy,
+                    onPin = { v ->
+                        error = null
+                        if (!confirming) pin = v
                         else {
-                            busy = true
-                            scope.launch {
-                                val words = withContext(Dispatchers.Default) {
-                                    keys.setUp(pin.toCharArray(), bip39).also { VaultApp.sessionKey = keys.unlockWithPin(pin.toCharArray()) }
-                                }
-                                onDone(words)
-                            }
+                            confirm = v
+                            // The confirmation stops at the length of the first PIN and verifies by itself; no button press needed.
+                            if (v.length == pin.length) createVault()
                         }
                     },
+                    maxLength = if (confirming) pin.length else MAX_PIN,
+                    onSubmit = { if (!busy && cur.length >= MIN_PIN) nextStep() },
+                )
+                Button(
+                    enabled = !busy && cur.length >= MIN_PIN, modifier = Modifier.fillMaxWidth().height(52.dp),
+                    onClick = { nextStep() },
                 ) { Text(if (busy) "Securing…" else if (confirming) "Create vault" else "Next") }
             }
         }

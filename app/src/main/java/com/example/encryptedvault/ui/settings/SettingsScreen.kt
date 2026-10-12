@@ -127,10 +127,6 @@ fun SettingsScreen(settings: AppSettings, keys: KeyHierarchy, onBack: () -> Unit
                     if (duressSet) "Armed: entering it erases every photo and video, then opens an empty vault" else "A second PIN that silently erases everything when entered",
                     if (duressSet) "Remove" else "Set up",
                 ) { showDuress = true }
-                HorizontalDivider()
-                Text("Auto-lock", style = MaterialTheme.typography.titleSmall)
-                Text("When the app goes to the background", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Choices(listOf("Instantly" to 0, "30 s" to 30, "1 min" to 60, "5 min" to 300), settings.autoLockSec) { settings.putAutoLockSec(it) }
             }
 
             Section("Backup") {
@@ -166,7 +162,11 @@ fun SettingsScreen(settings: AppSettings, keys: KeyHierarchy, onBack: () -> Unit
 
 
             Section("Privacy") {
-                SwitchRow("Block screenshots & recents preview", "Hides content in the app switcher and screen capture (release builds)", settings.secureScreen) { settings.putSecureScreen(it) }
+                Text(
+                    "Screenshots and the recents preview are always blocked. The vault locks as soon as the app leaves the screen.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 HorizontalDivider()
                 SwitchRow("Remove location when sharing", "Strips GPS EXIF from the temporary shared copy", settings.stripExif) { settings.putStripExif(it) }
                 HorizontalDivider()

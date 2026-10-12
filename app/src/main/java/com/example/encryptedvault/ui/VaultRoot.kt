@@ -13,11 +13,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import com.example.encryptedvault.MainActivity
 import com.example.encryptedvault.VaultApp
 import com.example.encryptedvault.crypto.Bip39
 import com.example.encryptedvault.crypto.KeyHierarchy
-import com.example.encryptedvault.security.Biometric.findActivity
+
 import com.example.encryptedvault.ui.auth.LockScreen
 import com.example.encryptedvault.ui.auth.PhraseScreen
 import com.example.encryptedvault.ui.auth.RecoverScreen
@@ -33,12 +32,10 @@ private enum class Stage { SETUP, PHRASE, LOCK, RECOVER, MAIN }
 fun VaultRoot(keys: KeyHierarchy, bip39: Bip39, settings: AppSettings) {
     var stage by remember { mutableStateOf(if (!keys.isSetUp()) Stage.SETUP else Stage.LOCK) }
     var phrase by remember { mutableStateOf<List<String>>(emptyList()) }
-    val context = LocalContext.current
     val view = LocalView.current
 
     // Gap 6: discard touches while another window overlays this one.
     SideEffect { view.filterTouchesWhenObscured = true }
-    LaunchedEffect(settings.secureScreen) { (context.findActivity() as? MainActivity)?.applySecure(settings.secureScreen) }
 
     val unlocked = VaultApp.sessionKey != null
     LaunchedEffect(unlocked) { if (!unlocked && stage == Stage.MAIN) stage = Stage.LOCK }
