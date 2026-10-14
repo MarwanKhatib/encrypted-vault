@@ -26,10 +26,23 @@ class UnlockAttempts(
             sameBoot = prefs.getString(KEY_LOCK_BOOT, null) == currentBootId(),
         )
 
+    /** Epoch millis of the most recent wrong PINs, oldest first, at most [LOG_CAP] (the intruder log). Times only, no photo. */
+    fun recentFailures(): List<Long> =
+        prefs
+            .getString(KEY_LOG, "")
+            .orEmpty()
+            .split(',')
+            .mapNotNull { it.toLongOrNull() }
+
     /** Counts a wrong PIN and, after [FREE_TRIES], starts an exponentially growing delay (30 s doubling, capped at 15 min). */
     fun recordFailure() {
         val n = failCount() + 1
-        val edit = prefs.edit().putInt(KEY_FAILS, n)
+        val log = appendCapped(recentFailures(), System.currentTimeMillis()).joinToString(",")
+        val edit =
+            prefs
+                .edit()
+                .putInt(KEY_FAILS, n)
+                .putString(KEY_LOG, log)
         if (n >= FREE_TRIES) {
             val seconds = minOf(LOCKOUT_MAX_SECONDS, LOCKOUT_BASE_SECONDS shl (n - FREE_TRIES).coerceAtMost(LOCKOUT_MAX_DOUBLINGS))
             edit
@@ -57,6 +70,17 @@ class UnlockAttempts(
         private const val KEY_LOCK_MS = "lock_ms"
         private const val KEY_LOCK_STARTED = "lock_started"
         private const val KEY_LOCK_BOOT = "lock_boot"
+        private const val KEY_LOG = "log"
+
+        /** Number of failed-PIN times kept for the intruder log. */
+        const val LOG_CAP = 20
+
+        /** [log] with [now] appended, keeping only the newest [cap] entries. */
+        internal fun appendCapped(
+            log: List<Long>,
+            now: Long,
+            cap: Int = LOG_CAP,
+        ): List<Long> = (log + now).takeLast(cap)
 
         /** First lockout after [FREE_TRIES] wrong PINs; doubles with each further failure up to [LOCKOUT_MAX_SECONDS]. */
         private const val LOCKOUT_BASE_SECONDS = 30L

@@ -9,7 +9,7 @@ Package root: `com.example.encryptedvault`. Dependencies point downwards: `ui` â
 | `data` | Room database (schema v5), encrypted metadata codec, `VaultRepository` (the only place rows become `VaultItem`s), on-disk layout | `VaultRepository`, `VaultDatabase`, `VaultStorage` |
 | `media` | Plaintext handling: thumbnails, image edits, video trim, playback data source, restore/share/import staging | `MediaTransfer`, `ImageEdits`, `VideoTrim`, `VaultPlayer`, `RestoreTarget` |
 | `backup` | Backup export and restore, the record wire format, and unencrypted plain export | `VaultBackup`, `BackupRecords`, `PlainExport` |
-| `work` | Background import: `ImportWorker` encrypts staged files in budgeted batches | `ImportWorker` |
+| `work` | Background import: `ImportWorker` encrypts staged files in budgeted batches; `TrashPurgeWorker` purges expired Recently Deleted items daily | `ImportWorker`, `TrashPurgeWorker` |
 | `appicon` | Launcher alias switching (disguises) | `AppIcon.kt` |
 | `ui/*` | Compose screens, one sub-package per feature; `ui/common` has shared widgets and item actions; `ui/theme` holds the cyber palette (`Theme.kt`) and the type scale (`Type.kt`, system fonts only, see ADR-011) | `ui/VaultRoot.kt`, `ui/MainScaffold.kt`, `ui/theme/Theme.kt` |
 

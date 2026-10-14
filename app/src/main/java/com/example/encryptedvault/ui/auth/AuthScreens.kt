@@ -1,6 +1,8 @@
 package com.example.encryptedvault.ui.auth
 
 import android.view.KeyEvent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -36,6 +38,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -77,6 +80,7 @@ import com.example.encryptedvault.crypto.UnlockAttempts
 import com.example.encryptedvault.security.Biometric
 import com.example.encryptedvault.security.Biometric.findActivity
 import com.example.encryptedvault.security.PanicWipe
+import com.example.encryptedvault.ui.settings.AppSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -334,7 +338,12 @@ fun SetupScreen(
                 scope.launch {
                     val words =
                         withContext(Dispatchers.Default) {
-                            keys.setUp(pin.toCharArray(), bip39).also { VaultApp.sessionKey = keys.unlockWithPin(pin.toCharArray()) }
+                            val chars = pin.toCharArray()
+                            try {
+                                keys.setUp(chars, bip39).also { VaultApp.sessionKey = keys.unlockWithPin(chars) }
+                            } finally {
+                                chars.fill('0')
+                            }
                         }
                     onDone(words)
                 }
@@ -404,6 +413,9 @@ fun SetupScreen(
     }
 }
 
+/** Recovery words as a numbered text file, one word per line. */
+internal fun recoveryPhraseText(words: List<String>): String = words.withIndex().joinToString("\n") { (i, w) -> "${i + 1}. $w" } + "\n"
+
 /** Shows the 24 recovery words once and requires the user to confirm they were written down. The words are never stored. */
 @Composable
 fun PhraseScreen(
@@ -411,6 +423,17 @@ fun PhraseScreen(
     onDone: () -> Unit,
 ) {
     var saved by remember { mutableStateOf(false) }
+    var fileStatus by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    val saveFile =
+        rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+            if (uri != null) {
+                val text = recoveryPhraseText(words).toByteArray()
+                val written = runCatching { checkNotNull(context.contentResolver.openOutputStream(uri)).use { it.write(text) } }
+                if (written.isSuccess) AppSettings(context.applicationContext).putRecoveryChecked(System.currentTimeMillis())
+                fileStatus = if (written.isSuccess) "Saved. Anyone with this file can open your vault." else "Could not save the file."
+            }
+        }
     Page {
         Text("Recovery phrase", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text(
@@ -435,6 +458,15 @@ fun PhraseScreen(
             Checkbox(saved, { saved = it })
             Text("I wrote it down")
         }
+        OutlinedButton(onClick = { saveFile.launch("evault-recovery-phrase.txt") }, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+            Text("Save to file")
+        }
+        Text(
+            "Saving writes the words as plain text. Keep the file offline, not in a cloud-synced folder.",
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        fileStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         Button(enabled = saved, onClick = onDone, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Open vault") }
     }
 }

@@ -44,6 +44,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -61,6 +62,8 @@ import com.example.encryptedvault.appicon.AppIcon
 import com.example.encryptedvault.appicon.AppIconManager
 import com.example.encryptedvault.crypto.KeyHierarchy
 import com.example.encryptedvault.crypto.PinPolicy
+import com.example.encryptedvault.crypto.UnlockAttempts
+import com.example.encryptedvault.data.VaultStorage
 import com.example.encryptedvault.security.Biometric
 import com.example.encryptedvault.security.Biometric.findActivity
 import com.example.encryptedvault.ui.auth.MIN_PIN
@@ -68,6 +71,8 @@ import com.example.encryptedvault.ui.auth.PinField
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.DateFormat
+import java.util.Date
 
 /** Settings: unlock methods, appearance, privacy, and the home-screen icon (disguise). */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -107,6 +112,35 @@ fun SettingsScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            Section("Status") {
+                val hardware = remember { keys.wrapKeyInSecureHardware() }
+                val vaultBytes by produceState(initialValue = -1L) { value = withContext(Dispatchers.IO) { sumFileBytes(VaultStorage.directory(context)) } }
+                StatusLine("Vault", if (VaultApp.sessionKey != null) "Unlocked" else "Locked")
+                StatusLine(
+                    "Auto-lock",
+                    if (settings.idleLockMinutes == 0) "Off (locks when the app leaves the screen)" else "After ${settings.idleLockMinutes} min idle",
+                )
+                StatusLine("Face-down lock", if (settings.faceDownLock) "On (while the app is open)" else "Off")
+                StatusLine(
+                    "Fingerprint",
+                    when {
+                        !biometricAvailable -> "Not available"
+                        biometricOn -> "On"
+                        else -> "Off"
+                    },
+                )
+                StatusLine(
+                    "Key storage",
+                    when (hardware) {
+                        true -> "Secure hardware (TEE or StrongBox)"
+                        false -> "Software only: this device does not report hardware-backed keys"
+                        null -> "Not created yet"
+                    },
+                )
+                val shownVault = if (vaultBytes < 0) "…" else formatBytes(vaultBytes)
+                StatusLine("Vault size", "$shownVault encrypted · ${formatBytes(context.filesDir.usableSpace)} free")
+            }
+
             Section("Unlock") {
                 SwitchRow(
                     "Fingerprint unlock",
@@ -153,6 +187,26 @@ fun SettingsScreen(
                     },
                     if (duressSet) "Remove" else "Set up",
                 ) { showDuress = true }
+                Text(
+                    "The duress PIN opens an empty vault. The PIN screen looks the same for every PIN, so nothing on screen shows which one was entered.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            Section("Failed PIN attempts") {
+                val dateFormat = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
+                val log = remember { keys.attempts.recentFailures().asReversed() }
+                Text(
+                    "Times of the last ${UnlockAttempts.LOG_CAP} wrong PINs, newest first. Only times are kept; no photo is taken.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (log.isEmpty()) {
+                    Text("None recorded.", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    log.forEach { Text(dateFormat.format(Date(it)), style = MaterialTheme.typography.bodySmall) }
+                }
             }
 
             Section("Backup") {
@@ -164,11 +218,32 @@ fun SettingsScreen(
                 BackupRows { message -> scope.launch { snackbar.showSnackbar(message) } }
             }
 
+            Section("Recovery") {
+                val due = RecoveryReminder.isDue(settings.recoveryCheckedAt, System.currentTimeMillis())
+                Text(
+                    when {
+                        settings.recoveryCheckedAt <= 0 -> "Recovery file: never confirmed. Save it at setup, then re-check it here."
+                        due -> "Recovery file: last confirmed more than 90 days ago. Open it and check it still has all 24 words."
+                        else -> "Recovery file: confirmed recently."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (due || settings.recoveryCheckedAt <= 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                ActionRow("Re-check recovery file", "Confirm you opened the saved file and it still has all 24 words", "Confirmed") {
+                    settings.putRecoveryChecked(System.currentTimeMillis())
+                }
+            }
+
             Section("App icon") {
                 Text(
                     "Change how the app looks on your home screen. Pick a disguise to hide that this is a vault.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "A disguise changes the name and icon only. It stops casual glances, not a determined person or a forensic check.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
                 )
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     AppIcon.entries.forEach { icon ->
@@ -215,6 +290,12 @@ fun SettingsScreen(
                 )
                 Choices(listOf("Off" to 0, "1 min" to 1, "5 min" to 5, "15 min" to 15), settings.idleLockMinutes) { settings.putIdleLockMinutes(it) }
                 HorizontalDivider()
+                SwitchRow(
+                    "Lock when face down",
+                    "Locks when the screen points at the floor while the app is open",
+                    settings.faceDownLock,
+                ) { settings.putFaceDownLock(it) }
+                HorizontalDivider()
                 SwitchRow("Offer to delete originals", "After import, ask Android to delete the unencrypted originals", settings.offerDeleteOriginals) {
                     settings.putOfferDeleteOriginals(it)
                 }
@@ -260,6 +341,18 @@ fun SettingsScreen(
             showChangePin = false
             if (result != null) scope.launch { snackbar.showSnackbar(if (result) "PIN changed" else "Current PIN is wrong") }
         }
+    }
+}
+
+/** Label and value on one line of the status panel. */
+@Composable
+private fun StatusLine(
+    label: String,
+    value: String,
+) {
+    Row(Modifier.fillMaxWidth()) {
+        Text(label, Modifier.weight(1f).padding(end = 12.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
     }
 }
 

@@ -1,6 +1,10 @@
 package com.example.encryptedvault
 
 import android.content.res.Configuration
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -13,11 +17,13 @@ import androidx.fragment.app.FragmentActivity
 import com.example.encryptedvault.crypto.Bip39
 import com.example.encryptedvault.crypto.KeyHierarchy
 import com.example.encryptedvault.media.MediaTransfer
+import com.example.encryptedvault.security.FaceDown
 import com.example.encryptedvault.security.IdleLock
 import com.example.encryptedvault.security.Integrity
 import com.example.encryptedvault.security.SessionManager
 import com.example.encryptedvault.ui.VaultRoot
 import com.example.encryptedvault.ui.settings.AppSettings
+import com.example.encryptedvault.work.TrashPurgeWorker
 
 /** FragmentActivity (not ComponentActivity) because BiometricPrompt needs it. */
 class MainActivity : FragmentActivity() {
@@ -35,6 +41,7 @@ class MainActivity : FragmentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         settings = AppSettings(applicationContext)
         MediaTransfer.sweepTemporaryPlaintext(applicationContext, olderThanMs = 10 * 60_000L) // leftover share/playback plaintext
+        TrashPurgeWorker.schedule(applicationContext)
         val words =
             assets
                 .open("bip39_english.txt")
@@ -70,14 +77,30 @@ class MainActivity : FragmentActivity() {
         super.onUserInteraction()
     }
 
+    /** Face-down lock (opt-in, Settings → Privacy). Listens only while the app is open; the flag is read on each reading. */
+    private val faceDown =
+        object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent) {
+                if (settings.faceDownLock && FaceDown.isFaceDown(event.values[2]) && VaultApp.sessionKey != null) lockNow()
+            }
+
+            override fun onAccuracyChanged(
+                sensor: Sensor?,
+                accuracy: Int,
+            ) = Unit
+        }
+
     override fun onResume() {
         super.onResume()
         idle.touch()
         idleHandler.postDelayed(idleCheck, IdleLock.CHECK_INTERVAL_MS)
+        val sensors = getSystemService(SENSOR_SERVICE) as SensorManager
+        sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { sensors.registerListener(faceDown, it, SensorManager.SENSOR_DELAY_UI) }
     }
 
     override fun onPause() {
         idleHandler.removeCallbacks(idleCheck)
+        (getSystemService(SENSOR_SERVICE) as SensorManager).unregisterListener(faceDown)
         super.onPause()
     }
 

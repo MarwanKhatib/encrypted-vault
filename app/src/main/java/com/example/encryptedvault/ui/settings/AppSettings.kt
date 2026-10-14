@@ -3,6 +3,7 @@ package com.example.encryptedvault.ui.settings
 import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
@@ -24,6 +25,14 @@ class AppSettings(
 
     /** Minutes of no input before the vault locks; 0 (the default) turns idle lock off (ADR-010). */
     var idleLockMinutes by mutableIntStateOf(prefs.getInt("idle_lock_minutes", 0))
+        private set
+
+    /** Locks when the phone lies face down while the app is open (see FaceDown). */
+    var faceDownLock by mutableStateOf(prefs.getBoolean("face_down_lock", false))
+        private set
+
+    /** Epoch millis when the recovery file was last confirmed; 0 means never. */
+    var recoveryCheckedAt by mutableLongStateOf(prefs.getLong("recovery_checked_at", 0L))
         private set
 
     /** iPhone style: newest items at the bottom of the Library grid, opened scrolled to the end. */
@@ -58,6 +67,18 @@ class AppSettings(
     fun putIdleLockMinutes(v: Int) {
         idleLockMinutes = v
         prefs.edit().putInt("idle_lock_minutes", v).apply()
+    }
+
+    /** Stores whether the phone locks when turned face down. */
+    fun putFaceDownLock(v: Boolean) {
+        faceDownLock = v
+        prefs.edit().putBoolean("face_down_lock", v).apply()
+    }
+
+    /** Stores when the recovery file was last confirmed (epoch millis). */
+    fun putRecoveryChecked(now: Long) {
+        recoveryCheckedAt = now
+        prefs.edit().putLong("recovery_checked_at", now).apply()
     }
 
     /** Stores whether the Library puts the newest items at the bottom, like iOS. */

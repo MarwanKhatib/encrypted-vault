@@ -2,6 +2,7 @@ package com.example.encryptedvault.crypto
 
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyInfo
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.security.keystore.StrongBoxUnavailableException
@@ -13,6 +14,7 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.Mac
 import javax.crypto.SecretKey
+import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
@@ -227,6 +229,17 @@ class KeyHierarchy(
 
     /** The auth-gated biometric Keystore key; created on first use (StrongBox first, TEE fallback). */
     private fun bioKey(): SecretKey = keystoreAesKey(BIO_ALIAS, authRequired = true)
+
+    /**
+     * True when the device-bound wrapping key is inside secure hardware (TEE or StrongBox), false when it is software only,
+     * null when it does not exist yet. Shown on the Settings status panel. "In the Keystore" alone does not imply hardware.
+     */
+    @Suppress("DEPRECATION") // isInsideSecureHardware is deprecated from API 31; minSdk is 28, so it is still the portable check
+    fun wrapKeyInSecureHardware(): Boolean? {
+        val key = KeyStore.getInstance(KEYSTORE).apply { load(null) }.getKey(KS_ALIAS, null) as? SecretKey ?: return null
+        val info = SecretKeyFactory.getInstance(key.algorithm, KEYSTORE).getKeySpec(key, KeyInfo::class.java) as KeyInfo
+        return info.isInsideSecureHardware
+    }
 
     // ---- Internals ----------------------------------------------------------------------------
 
