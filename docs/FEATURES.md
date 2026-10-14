@@ -83,6 +83,19 @@ flowchart LR
     E --> R[Row complete → Flow → Library]
 ```
 
+Per-media state (vault row, keyed by content hash):
+
+```mermaid
+stateDiagram-v2
+    [*] --> none: not imported
+    none --> pending: ImportWorker upsert (encrypting)
+    pending --> complete: .enc + thumbnail committed
+    pending --> none: any failure, row deleted, files removed
+    complete --> [*]: original offered for delete
+```
+
+Deletion gate: an original is offered only when its hash has a `complete` row and the full GCM read of that copy succeeds (`MediaTransfer.verifiedOriginalUris`). A batch reporting SUCCEEDED does not mean every file imported; the count of failed files is reported (`ImportWorker.KEY_FAILED`).
+
 ### 4.2 Lock and unlock
 
 ```mermaid

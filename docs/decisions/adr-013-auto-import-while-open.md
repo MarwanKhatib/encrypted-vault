@@ -13,7 +13,7 @@ Users want new photos and videos to reach the vault without picking them each ti
 - **Only while unlocked:** the callback returns at once when the session key is null. Items added while locked are picked up at the next gallery change or next resume.
 - **Watermark:** turning the setting on sets `autoImportSince` to now. Only items with a newer `DATE_ADDED` are imported. The watermark moves to the newest imported item after each batch is queued. It never moves back.
 - **Same pipeline as the picker:** items are copied to `cache/import` (`MediaTransfer.stage`), encrypted by `ImportWorker` in batches, and deduplicated by content hash. Items over 500 MB are skipped.
-- **No delete prompt.** Originals are never removed automatically. Android requires a user confirmation for each deletion anyway.
+- **One-tap delete of originals, never automatic.** After a batch succeeds and `offerDeleteOriginals` is on, the app asks Android (`MediaStore.createDeleteRequest`) to delete the originals that are verified in the vault (`MediaTransfer.verifiedOriginalUris`: hash match and full GCM decrypt). Android shows its own confirmation; nothing is deleted without the user's tap.
 
 ## Alternatives considered
 - **Background import while locked.** Needs a key that can encrypt without the PIN. That weakens the model (ADR-004). Rejected.
@@ -23,6 +23,7 @@ Users want new photos and videos to reach the vault without picking them each ti
 
 ## Consequences
 - **Originals stay unencrypted** in the gallery until the user deletes them. The Settings text says so. This is the main privacy cost of the feature.
+- **One prompt per batch.** Several batches in a row can show several delete prompts in sequence. Accepted for now.
 - **Android 14 partial access:** if the user grants only selected photos, the observer sees only those. The app does not ask for full access.
 - **Stage failure drops an item.** If a file cannot be copied to the cache, it is skipped and the watermark still moves past it. Accepted; the original is untouched and can be imported by hand.
 - **Battery:** the observer runs while the app is open only.

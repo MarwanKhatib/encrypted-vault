@@ -310,7 +310,8 @@ fun SettingsScreen(
                 HorizontalDivider()
                 SwitchRow(
                     "Import new photos automatically",
-                    "While the vault is open, new photos and videos are copied in. Originals stay in your gallery, unencrypted, until you delete them.",
+                    "While the vault is open, new photos and videos are copied in. Originals stay in your gallery, unencrypted. " +
+                        "After each import you can delete them with one tap.",
                     settings.autoImport,
                 ) { on ->
                     when {

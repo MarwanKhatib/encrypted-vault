@@ -48,13 +48,15 @@ class ImportWorker(
                 folders = inputData.getStringArray(KEY_FOLDERS).orEmpty(),
                 takenAt = inputData.getLongArray(KEY_TAKEN_AT) ?: LongArray(0),
             )
-        paths.forEachIndexed { index, path -> importEntry(key, dao, path, index, batch) }
-        return Result.success()
+        val failed = paths.indices.count { index -> !importEntry(key, dao, paths[index], index, batch) }
+        // Success means the batch ran; per-file failures are counted here so the UI never reports them as imported.
+        return Result.success(Data.Builder().putInt(KEY_FAILED, failed).build())
     }
 
     /**
-     * Imports the staged or picked file at [path]. A missing file or one that is already vaulted is skipped; a staged copy is
-     * always deleted afterwards, so no plaintext is left in the cache even on failure (the original stays untouched).
+     * Imports the staged or picked file at [path]. Returns false when the file is missing or could not be encrypted; such a file
+     * has no `complete` row, so its original is never offered for deletion. An already vaulted file counts as done.
+     * A staged copy is always deleted afterwards, so no plaintext is left in the cache even on failure.
      */
     private suspend fun importEntry(
         key: SecretKey,
@@ -62,14 +64,14 @@ class ImportWorker(
         path: String,
         index: Int,
         batch: BatchInput,
-    ) {
+    ): Boolean {
         val source = File(path)
-        if (!source.exists()) return
+        if (!source.exists()) return false
         val isStaged = source.path.startsWith(applicationContext.cacheDir.path)
         val hash = VaultFiles.sha256(source)
         if (dao.findCompleteByHash(hash) != null) {
             if (isStaged) source.delete()
-            return
+            return true
         }
         val mime =
             android.webkit.MimeTypeMap
@@ -82,9 +84,12 @@ class ImportWorker(
                 batch.takenAt.getOrNull(index) ?: source.lastModified(),
             )
         // One unreadable file must not abort the rest of the batch.
-        runCatching { importOne(key, source, hash, mime, info) }
-            .onFailure { VaultStorage.deleteAll(applicationContext, hash) }
+        val done =
+            runCatching { importOne(key, source, hash, mime, info) }
+                .onFailure { VaultStorage.deleteAll(applicationContext, hash) }
+                .isSuccess
         if (isStaged) source.delete()
+        return done
     }
 
     /** The per-batch arrays from the worker input: display names, source folders and capture times, indexed like the paths. */
@@ -143,6 +148,9 @@ class ImportWorker(
 
     companion object {
         const val KEY_PATHS = "paths"
+
+        /** Output key: how many files in the batch could not be imported. Read by the UI and by auto-import. */
+        const val KEY_FAILED = "failed"
 
         /** JPEG quality of the encrypted thumbnail that the grid shows; smaller than the full file, so it loads fast. */
         const val THUMBNAIL_JPEG_QUALITY = 82

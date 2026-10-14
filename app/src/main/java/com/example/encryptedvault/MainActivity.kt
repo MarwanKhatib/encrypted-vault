@@ -15,8 +15,12 @@ import android.util.Log
 import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import com.example.encryptedvault.crypto.Bip39
 import com.example.encryptedvault.crypto.KeyHierarchy
 import com.example.encryptedvault.media.AutoImport
@@ -30,6 +34,7 @@ import com.example.encryptedvault.ui.settings.AppSettings
 import com.example.encryptedvault.work.ImportWorker
 import com.example.encryptedvault.work.TrashPurgeWorker
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -104,7 +109,14 @@ class MainActivity : FragmentActivity() {
             override fun onChange(selfChange: Boolean) = importNewItems()
         }
 
-    /** Copies gallery items added since the watermark into the vault. Does nothing while the vault is locked or auto-import is off. */
+    /** Result of the system "delete originals" dialog. Only clears the stop-lock guard; nothing is deleted without the user's tap. */
+    private val deleteOriginals =
+        registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { SessionManager.suppressNextStopLock = false }
+
+    /**
+     * Copies gallery items added since the watermark into the vault. Does nothing while the vault is locked or auto-import is off.
+     * When the batches succeed, asks once (Android confirms) whether to delete the originals that are verified in the vault.
+     */
     private fun importNewItems() {
         if (!settings.autoImport || VaultApp.sessionKey == null) return
         lifecycleScope.launch(Dispatchers.IO) {
@@ -112,8 +124,21 @@ class MainActivity : FragmentActivity() {
             val items = AutoImport.newItems(applicationContext, since).filterNot { MediaTransfer.exceedsLimit(applicationContext, it.first) }
             if (items.isEmpty()) return@launch
             val staged = items.mapNotNull { MediaTransfer.stage(applicationContext, it.first) }
-            ImportWorker.enqueueBatches(applicationContext, staged)
+            val workManager = WorkManager.getInstance(applicationContext)
+            val batches = ImportWorker.enqueueBatches(applicationContext, staged)
             withContext(Dispatchers.Main) { settings.putAutoImportSince(AutoImport.nextWatermark(since, items.map { it.second })) }
+            val infos = batches.map { id -> workManager.getWorkInfoByIdFlow(id).first { it != null && it.state.isFinished } }
+            val succeeded = infos.isNotEmpty() && infos.all { it?.state == WorkInfo.State.SUCCEEDED }
+            val failed = infos.sumOf { it?.outputData?.getInt(ImportWorker.KEY_FAILED, 0) ?: 0 }
+            if (failed > 0) Log.w(TAG, "auto-import: $failed of ${items.size} files not encrypted; their originals are kept")
+            if (!succeeded || !settings.offerDeleteOriginals) return@launch
+            val deletable = MediaTransfer.verifiedOriginalUris(applicationContext, items.map { it.first })
+            if (deletable.isEmpty()) return@launch
+            withContext(Dispatchers.Main) {
+                SessionManager.suppressNextStopLock = true
+                val sender = MediaStore.createDeleteRequest(contentResolver, deletable).intentSender
+                deleteOriginals.launch(IntentSenderRequest.Builder(sender).build())
+            }
         }
     }
 

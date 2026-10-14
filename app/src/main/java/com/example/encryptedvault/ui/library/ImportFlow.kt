@@ -69,25 +69,30 @@ fun rememberImportLauncher(
                 val staged = withContext(Dispatchers.IO) { picked.mapNotNull { MediaTransfer.stage(context, it) } }
                 val workManager = WorkManager.getInstance(context)
                 val batches = ImportWorker.enqueueBatches(context, staged)
-                val succeeded =
-                    batches.isNotEmpty() &&
-                        batches.all { id ->
-                            workManager.getWorkInfoByIdFlow(id).first { it != null && it.state.isFinished }?.state == WorkInfo.State.SUCCEEDED
-                        }
+                val infos = batches.map { id -> workManager.getWorkInfoByIdFlow(id).first { it != null && it.state.isFinished } }
+                val succeeded = infos.isNotEmpty() && infos.all { it?.state == WorkInfo.State.SUCCEEDED }
+                val failed = infos.sumOf { it?.outputData?.getInt(ImportWorker.KEY_FAILED, 0) ?: 0 }
                 onBusy(null)
 
                 if (!succeeded) {
                     snackbar.showSnackbar("Encryption failed; originals untouched.")
                     return@launch
                 }
+                val message =
+                    if (failed > 0) {
+                        "Added ${staged.size - failed}; $failed could not be encrypted and their originals are kept."
+                    } else {
+                        "Added ${staged.size} to the vault."
+                    }
                 if (!settings.offerDeleteOriginals) {
-                    snackbar.showSnackbar("Added ${staged.size} to the vault.")
+                    snackbar.showSnackbar(message)
                     return@launch
                 }
 
+                // Only files whose vault row is complete and decrypts are offered; failed or unfinished files keep their originals.
                 val deletable = withContext(Dispatchers.IO) { MediaTransfer.verifiedOriginalUris(context, picked) }
                 if (deletable.isEmpty()) {
-                    snackbar.showSnackbar("Encrypted. Originals can't be auto-removed; delete them in your gallery.")
+                    snackbar.showSnackbar("$message Originals can't be auto-removed; delete them in your gallery.")
                     return@launch
                 }
                 SessionManager.suppressNextStopLock = true
