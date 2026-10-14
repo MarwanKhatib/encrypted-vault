@@ -6,6 +6,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -19,11 +20,9 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
-import androidx.work.WorkInfo
-import androidx.work.WorkManager
 import com.example.encryptedvault.crypto.Bip39
 import com.example.encryptedvault.crypto.KeyHierarchy
-import com.example.encryptedvault.media.AutoImport
+import com.example.encryptedvault.media.ExistingImport
 import com.example.encryptedvault.media.MediaTransfer
 import com.example.encryptedvault.security.FaceDown
 import com.example.encryptedvault.security.IdleLock
@@ -32,10 +31,8 @@ import com.example.encryptedvault.security.SessionManager
 import com.example.encryptedvault.ui.VaultRoot
 import com.example.encryptedvault.ui.settings.AppSettings
 import com.example.encryptedvault.update.UpdateCheckWorker
-import com.example.encryptedvault.work.ImportWorker
 import com.example.encryptedvault.work.TrashPurgeWorker
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -57,6 +54,7 @@ class MainActivity : FragmentActivity() {
         MediaTransfer.sweepTemporaryPlaintext(applicationContext, olderThanMs = 10 * 60_000L) // leftover share/playback plaintext
         TrashPurgeWorker.schedule(applicationContext)
         UpdateCheckWorker.schedule(applicationContext)
+        ExistingImport.onAdded = ::askDeleteOriginals
         val words =
             assets
                 .open("bip39_english.txt")
@@ -96,7 +94,10 @@ class MainActivity : FragmentActivity() {
     private val faceDown =
         object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
-                if (settings.faceDownLock && FaceDown.isFaceDown(event.values[2]) && VaultApp.sessionKey != null) lockNow()
+                if (!settings.faceDownLock || !FaceDown.isFaceDown(event.values[2])) return
+                if (VaultApp.sessionKey == null) return
+                Log.i(TAG, "face-down: locking (z=${event.values[2]})")
+                lockNow()
             }
 
             override fun onAccuracyChanged(
@@ -108,33 +109,23 @@ class MainActivity : FragmentActivity() {
     /** Gallery changes trigger auto-import (ADR-013). The callback checks the setting and that the vault is open. */
     private val galleryObserver =
         object : ContentObserver(Handler(Looper.getMainLooper())) {
-            override fun onChange(selfChange: Boolean) = importNewItems()
+            override fun onChange(selfChange: Boolean) = importNewItems(force = true)
         }
 
     /** Result of the system "delete originals" dialog. Only clears the stop-lock guard; nothing is deleted without the user's tap. */
     private val deleteOriginals =
         registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { SessionManager.suppressNextStopLock = false }
 
-    /**
-     * Copies gallery items added since the watermark into the vault. Does nothing while the vault is locked or auto-import is off.
-     * When the batches succeed, asks once (Android confirms) whether to delete the originals that are verified in the vault.
-     */
-    private fun importNewItems() {
-        if (!settings.autoImport || VaultApp.sessionKey == null) return
+    /** Starts a gallery scan when auto-import is on; the scan skips itself if the vault is locked (ADR-016). */
+    private fun importNewItems(force: Boolean) {
+        if (settings.autoImport) ExistingImport.start(applicationContext, force)
+    }
+
+    /** After a scan added photos: asks once (Android confirms) whether to delete originals that are verified in the vault. */
+    private fun askDeleteOriginals(uris: List<Uri>) {
+        if (!settings.offerDeleteOriginals) return
         lifecycleScope.launch(Dispatchers.IO) {
-            val since = settings.autoImportSince
-            val items = AutoImport.newItems(applicationContext, since).filterNot { MediaTransfer.exceedsLimit(applicationContext, it.first) }
-            if (items.isEmpty()) return@launch
-            val staged = items.mapNotNull { MediaTransfer.stage(applicationContext, it.first) }
-            val workManager = WorkManager.getInstance(applicationContext)
-            val batches = ImportWorker.enqueueBatches(applicationContext, staged)
-            withContext(Dispatchers.Main) { settings.putAutoImportSince(AutoImport.nextWatermark(since, items.map { it.second })) }
-            val infos = batches.map { id -> workManager.getWorkInfoByIdFlow(id).first { it != null && it.state.isFinished } }
-            val succeeded = infos.isNotEmpty() && infos.all { it?.state == WorkInfo.State.SUCCEEDED }
-            val failed = infos.sumOf { it?.outputData?.getInt(ImportWorker.KEY_FAILED, 0) ?: 0 }
-            if (failed > 0) Log.w(TAG, "auto-import: $failed of ${items.size} files not encrypted; their originals are kept")
-            if (!succeeded || !settings.offerDeleteOriginals) return@launch
-            val deletable = MediaTransfer.verifiedOriginalUris(applicationContext, items.map { it.first })
+            val deletable = MediaTransfer.verifiedOriginalUris(applicationContext, uris)
             if (deletable.isEmpty()) return@launch
             withContext(Dispatchers.Main) {
                 SessionManager.suppressNextStopLock = true
@@ -149,10 +140,12 @@ class MainActivity : FragmentActivity() {
         idle.touch()
         idleHandler.postDelayed(idleCheck, IdleLock.CHECK_INTERVAL_MS)
         val sensors = getSystemService(SENSOR_SERVICE) as SensorManager
-        sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { sensors.registerListener(faceDown, it, SensorManager.SENSOR_DELAY_UI) }
+        val accelerometer = sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        Log.i(TAG, "face-down: sensor=${accelerometer != null} setting=${settings.faceDownLock}")
+        accelerometer?.let { sensors.registerListener(faceDown, it, SensorManager.SENSOR_DELAY_UI) }
         contentResolver.registerContentObserver(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, galleryObserver)
         contentResolver.registerContentObserver(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, true, galleryObserver)
-        importNewItems()
+        importNewItems(force = false)
     }
 
     override fun onPause() {

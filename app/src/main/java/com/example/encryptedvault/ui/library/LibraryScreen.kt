@@ -1,6 +1,7 @@
 package com.example.encryptedvault.ui.library
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.encryptedvault.data.Album
@@ -86,9 +88,17 @@ private fun LibraryFilter.icon(): ImageVector =
         LibraryFilter.VIDEOS -> Icons.Filled.Videocam
     }
 
+/** Zoom order for pinch: most zoomed out first, like the iPhone Photos Years / Months / Days / All tabs. */
+private val ZOOM_LEVELS = listOf(TimelineScope.YEARS, TimelineScope.MONTHS, TimelineScope.DAYS, TimelineScope.ALL)
+
+/** Accumulated pinch scale that triggers one zoom step in (spread) or out (pinch). */
+private const val ZOOM_IN_AT = 1.25f
+private const val ZOOM_OUT_AT = 0.8f
+
 /**
  * The Library tab, modelled on iOS Photos: Years / Months / Days / All, newest at the bottom,
  * a title that follows the scroll position, Select mode, and a ⋯ menu for filters and settings.
+ * Pinch in or out to change the zoom level.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -168,7 +178,32 @@ fun LibraryScreen(
         }
 
     Box(modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize()) {
+        /** Pinch steps the timeline like iPhone: spread zooms in (Years → Months → Days → All), pinch zooms back out. */
+        fun zoomBy(step: Int) {
+            val next = (ZOOM_LEVELS.indexOf(scope) + step).coerceIn(0, ZOOM_LEVELS.lastIndex)
+            if (ZOOM_LEVELS[next] != scope) {
+                scope = ZOOM_LEVELS[next]
+                focusYear = null
+                focusEvent = null
+            }
+        }
+        Column(
+            Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    var pinch = 1f
+                    detectTransformGestures { _, _, zoom, _ ->
+                        pinch *= zoom
+                        if (pinch > ZOOM_IN_AT) {
+                            zoomBy(1)
+                            pinch = 1f
+                        } else if (pinch < ZOOM_OUT_AT) {
+                            zoomBy(-1)
+                            pinch = 1f
+                        }
+                    }
+                },
+        ) {
             if (selectionMode) {
                 SelectionTopBar(selectedIds.size, "Item", onSelectAll = { selectedIds = gridItems.map { it.id }.toSet() }, onDone = ::endSelection)
             } else {
@@ -296,6 +331,10 @@ fun LibraryScreen(
                         scrollToEndKey = if (newestAtBottom) scrollKey else null,
                         onVisibleDay = { visibleDay = it },
                         contentPadding = PaddingValues(bottom = 88.dp),
+                        onDragSelect = { items, select ->
+                            val ids = items.map { it.id }.toSet()
+                            selectedIds = if (select) selectedIds + ids else selectedIds - ids
+                        },
                     )
             }
         }

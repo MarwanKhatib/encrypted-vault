@@ -1,6 +1,8 @@
 package com.example.encryptedvault.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -39,6 +41,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import com.example.encryptedvault.crypto.KeyHierarchy
 import com.example.encryptedvault.data.VaultRepository
+import com.example.encryptedvault.media.AutoImport
+import com.example.encryptedvault.media.ExistingImport
 import com.example.encryptedvault.security.SessionManager
 import com.example.encryptedvault.ui.albums.AlbumsScreen
 import com.example.encryptedvault.ui.albums.CollectionScreen
@@ -97,6 +101,14 @@ fun MainScaffold(
     val snackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) { repository.purgeExpiredTrash() }
+
+    // Default behaviour: when the vault opens, scan the gallery and add what the vault lacks (ADR-016). Asks for photo access once.
+    val mediaAccess =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { ExistingImport.start(context, force = true) }
+    LaunchedEffect(Unit) {
+        if (!settings.autoImport) return@LaunchedEffect
+        if (AutoImport.granted(context)) ExistingImport.start(context) else mediaAccess.launch(AutoImport.permissions())
+    }
     BackHandler(stack.isNotEmpty()) { stack.removeAt(stack.lastIndex) }
 
     /** Closes the top pushed screen. */

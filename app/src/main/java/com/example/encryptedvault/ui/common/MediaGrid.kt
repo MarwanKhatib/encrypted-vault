@@ -44,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -99,6 +100,7 @@ fun MediaGrid(
     onVisibleDay: ((LocalDate?) -> Unit)? = null,
     state: LazyGridState = rememberLazyGridState(),
     contentPadding: PaddingValues = PaddingValues(bottom = 96.dp),
+    onDragSelect: ((List<VaultItem>, Boolean) -> Unit)? = null,
 ) {
     val entries =
         remember(items, groupByDay) {
@@ -148,15 +150,23 @@ fun MediaGrid(
 
     LazyVerticalGrid(
         GridCells.Fixed(columns),
-        modifier.fillMaxSize().let {
-            if (onColumnsChange !=
-                null
-            ) {
-                it.pinchToChangeColumns(columns, minColumns, maxColumns, onColumnsChange)
-            } else {
-                it
-            }
-        },
+        modifier
+            .fillMaxSize()
+            .let {
+                if (onColumnsChange !=
+                    null
+                ) {
+                    it.pinchToChangeColumns(columns, minColumns, maxColumns, onColumnsChange)
+                } else {
+                    it
+                }
+            }.let {
+                if (selectionMode && onDragSelect != null) {
+                    it.dragToSelect(entries, state, shift, selectedIds, onDragSelect)
+                } else {
+                    it
+                }
+            },
         state = state,
         contentPadding = contentPadding,
         horizontalArrangement = Arrangement.spacedBy(GAP),
@@ -189,6 +199,67 @@ fun MediaGrid(
 
 private val GAP = 1.dp
 private const val FILLER_KEY = "bottom-anchor-filler"
+
+/**
+ * Google Photos-style drag selection. In selection mode, press a photo and drag across others: every photo the finger crosses
+ * gets the state the first photo would get (selected if it was not). A press that never leaves its photo does nothing here,
+ * so a plain tap still toggles that one photo through its own click handler.
+ */
+private fun Modifier.dragToSelect(
+    entries: List<GridEntry>,
+    state: LazyGridState,
+    shift: Int,
+    selectedIds: Set<Long>,
+    onSelect: (List<VaultItem>, Boolean) -> Unit,
+): Modifier =
+    composed {
+        val currentEntries by rememberUpdatedState(entries)
+        val currentSelected by rememberUpdatedState(selectedIds)
+        val currentOnSelect by rememberUpdatedState(onSelect)
+        pointerInput(Unit) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                val start = entryAt(state, down.position, shift, currentEntries) ?: return@awaitEachGesture
+                val first = (currentEntries[start] as? GridEntry.Tile)?.item ?: return@awaitEachGesture
+                val wantSelected = first.id !in currentSelected
+                var lastEnd = start
+                var dragging = false
+                do {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val change = event.changes.first()
+                    val end = entryAt(state, change.position, shift, currentEntries)
+                    if (end != null && end != start) dragging = true
+                    if (dragging) {
+                        // Taking the events over stops the grid from scrolling and stops the tile's click from firing on release.
+                        change.consume()
+                        if (end != null && end != lastEnd) {
+                            lastEnd = end
+                            val range = currentEntries.subList(minOf(start, end), maxOf(start, end) + 1)
+                            currentOnSelect(range.filterIsInstance<GridEntry.Tile>().map { it.item }, wantSelected)
+                        }
+                    }
+                } while (event.changes.any { it.pressed })
+            }
+        }
+    }
+
+/** Index in [entries] of the tile under [position], or null for headers and empty space. */
+private fun entryAt(
+    state: LazyGridState,
+    position: Offset,
+    shift: Int,
+    entries: List<GridEntry>,
+): Int? {
+    val hit =
+        state.layoutInfo.visibleItemsInfo.firstOrNull { info ->
+            position.x >= info.offset.x &&
+                position.x < info.offset.x + info.size.width &&
+                position.y >= info.offset.y &&
+                position.y < info.offset.y + info.size.height
+        } ?: return null
+    val index = hit.index - shift
+    return index.takeIf { it in entries.indices && entries[it] is GridEntry.Tile }
+}
 
 /** Two-finger pinch changes the column count (zoom in = fewer, larger tiles), like iOS. */
 private fun Modifier.pinchToChangeColumns(

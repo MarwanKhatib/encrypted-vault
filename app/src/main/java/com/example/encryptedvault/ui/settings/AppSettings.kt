@@ -27,12 +27,8 @@ class AppSettings(
     var idleLockMinutes by mutableIntStateOf(prefs.getInt("idle_lock_minutes", 0))
         private set
 
-    /** Copies new gallery photos and videos into the vault while it is open (ADR-013). Off by default. */
-    var autoImport by mutableStateOf(prefs.getBoolean("auto_import", false))
-        private set
-
-    /** Epoch seconds: gallery items added after this are auto-imported. Set when auto-import is turned on. */
-    var autoImportSince by mutableLongStateOf(prefs.getLong("auto_import_since", 0L))
+    /** Scans the phone's gallery and adds what the vault lacks while it is open (ADR-016). On by default. */
+    var autoImport by mutableStateOf(prefs.getBoolean(KEY_AUTO_IMPORT, true))
         private set
 
     /** Locks when the phone lies face down while the app is open (see FaceDown). */
@@ -71,24 +67,10 @@ class AppSettings(
         prefs.edit().putBoolean("offer_delete", v).apply()
     }
 
-    /** Turns auto-import on (imports only items added from [nowSec] on) or off. Turning it off keeps the watermark. */
-    fun putAutoImport(
-        enabled: Boolean,
-        nowSec: Long,
-    ) {
+    /** Turns the gallery scan on or off. */
+    fun putAutoImport(enabled: Boolean) {
         autoImport = enabled
-        if (enabled) autoImportSince = nowSec
-        prefs
-            .edit()
-            .putBoolean("auto_import", enabled)
-            .putLong("auto_import_since", autoImportSince)
-            .apply()
-    }
-
-    /** Moves the auto-import watermark forward after a batch was queued (epoch seconds). */
-    fun putAutoImportSince(v: Long) {
-        autoImportSince = v
-        prefs.edit().putLong("auto_import_since", v).apply()
+        prefs.edit().putBoolean(KEY_AUTO_IMPORT, enabled).apply()
     }
 
     /** Stores the idle-lock timeout in minutes; 0 turns it off. */
@@ -113,5 +95,10 @@ class AppSettings(
     fun putNewestAtBottom(v: Boolean) {
         newestAtBottom = v
         prefs.edit().putBoolean("newest_bottom", v).apply()
+    }
+
+    private companion object {
+        /** Versioned key: installs from before the default changed keep their old "off" value under the old name. */
+        const val KEY_AUTO_IMPORT = "auto_import_on"
     }
 }

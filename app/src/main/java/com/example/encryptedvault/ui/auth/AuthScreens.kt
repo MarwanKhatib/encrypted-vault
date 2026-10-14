@@ -3,7 +3,14 @@ package com.example.encryptedvault.ui.auth
 import android.view.KeyEvent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -19,6 +26,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -60,10 +68,13 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -88,6 +99,18 @@ import kotlinx.coroutines.withContext
 
 const val MIN_PIN = PinPolicy.MIN_LENGTH
 private const val MAX_PIN = PinPolicy.MAX_LENGTH
+private const val UNLOCK_MS = 380
+private const val UNLOCK_SWELL = 0.08f
+private const val BREATH_MS = 2400
+
+/** Short horizontal shake for a wrong PIN: the entry field rejects the input without a dialog. */
+private suspend fun Animatable<Float, AnimationVector1D>.shakeOnce() {
+    for (x in SHAKE_DP) animateTo(x, tween(durationMillis = SHAKE_STEP_MS))
+}
+
+/** Horizontal offsets of the shake, in dp, from left to right and back to the centre. */
+private val SHAKE_DP = listOf(-14f, 14f, -10f, 10f, -4f, 0f)
+private const val SHAKE_STEP_MS = 45
 
 // ---------------------------------------------------------------------------------------------
 // Shared bits
@@ -493,6 +516,15 @@ fun LockScreen(
     val scope = rememberCoroutineScope()
     val bio = remember { keys.biometricEnabled() && Biometric.available(ctx) }
     val pinLength = remember { keys.pinLength() } // 0 for vaults created before the length was stored
+    val haptics = LocalHapticFeedback.current
+    val unlockProgress = remember { Animatable(0f) }
+    val shake = remember { Animatable(0f) }
+    val breath by rememberInfiniteTransition(label = "lock-breath").animateFloat(
+        initialValue = 1f,
+        targetValue = 1.06f,
+        animationSpec = infiniteRepeatable(tween(BREATH_MS), RepeatMode.Reverse),
+        label = "breath",
+    )
 
     LaunchedEffect(remaining > 0) {
         while (remaining > 0) {
@@ -504,8 +536,13 @@ fun LockScreen(
     /** Completes an unlock: clears the failure counter and publishes the session key, which switches the app to the unlocked UI. */
     fun finish(key: javax.crypto.SecretKey) {
         keys.attempts.resetFailures()
-        VaultApp.sessionKey = key
-        onUnlocked()
+        // Success: a short haptic and the lock card swells and fades before the library appears.
+        scope.launch {
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            unlockProgress.animateTo(1f, tween(durationMillis = UNLOCK_MS))
+            VaultApp.sessionKey = key
+            onUnlocked()
+        }
     }
 
     /**
@@ -529,6 +566,7 @@ fun LockScreen(
                 keys.attempts.recordFailure()
                 remaining = keys.attempts.lockedForMs()
                 pin = ""
+                scope.launch { shake.shakeOnce() }
                 val left = UnlockAttempts.FREE_TRIES - keys.attempts.failCount()
                 error = if (left > 0) "Wrong PIN ($left tries before delay)" else "Wrong PIN"
             }
@@ -563,11 +601,24 @@ fun LockScreen(
             .fillMaxSize()
             .systemBarsPadding()
             .verticalScroll(rememberScrollState())
-            .padding(24.dp),
+            .padding(24.dp)
+            .offset(x = shake.value.dp)
+            .graphicsLayer {
+                val p = unlockProgress.value
+                alpha = 1f - p
+                scaleX = 1f + UNLOCK_SWELL * p
+                scaleY = scaleX
+            },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
     ) {
-        Badge()
+        // Slow breathing while locked, so the screen reads as alive; stops once unlocking starts.
+        Box(
+            Modifier.graphicsLayer {
+                scaleX = breath
+                scaleY = breath
+            },
+        ) { Badge() }
         Text("Vault locked", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         PinDots(pin.length, if (pinLength > 0) pinLength else MIN_PIN)
         val secs = (remaining + 999) / 1000

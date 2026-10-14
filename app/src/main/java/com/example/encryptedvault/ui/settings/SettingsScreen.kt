@@ -1,6 +1,8 @@
 package com.example.encryptedvault.ui.settings
 
+import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -71,8 +73,10 @@ import com.example.encryptedvault.crypto.UnlockAttempts
 import com.example.encryptedvault.data.VaultStorage
 import com.example.encryptedvault.media.AutoImport
 import com.example.encryptedvault.media.ExistingImport
+import com.example.encryptedvault.media.MediaTransfer
 import com.example.encryptedvault.security.Biometric
 import com.example.encryptedvault.security.Biometric.findActivity
+import com.example.encryptedvault.security.SessionManager
 import com.example.encryptedvault.ui.auth.MIN_PIN
 import com.example.encryptedvault.ui.auth.PinField
 import com.example.encryptedvault.update.UpdateController
@@ -103,17 +107,23 @@ fun SettingsScreen(
     val mediaPermission =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
             if (results.values.all { it }) {
-                settings.putAutoImport(true, System.currentTimeMillis() / 1000)
+                settings.putAutoImport(true)
+                ExistingImport.start(context, force = true)
             } else {
                 scope.launch { snackbar.showSnackbar("Allow photo and video access to turn on auto-import") }
             }
         }
+    val deleteOriginals =
+        rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) {
+            SessionManager.suppressNextStopLock = false
+            scope.launch { snackbar.showSnackbar("Done. If you back up to Google Photos, empty its trash too.") }
+        }
     val existingPermission =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
             if (results.values.all { it }) {
-                ExistingImport.start(context, settings)
+                ExistingImport.start(context, force = true)
             } else {
-                scope.launch { snackbar.showSnackbar("Allow photo and video access to import existing photos") }
+                scope.launch { snackbar.showSnackbar("Allow photo and video access to scan your photos") }
             }
         }
 
@@ -145,7 +155,7 @@ fun SettingsScreen(
                     if (settings.idleLockMinutes == 0) "Off (locks when the app leaves the screen)" else "After ${settings.idleLockMinutes} min idle",
                 )
                 StatusLine("Face-down lock", if (settings.faceDownLock) "On (while the app is open)" else "Off")
-                StatusLine("Auto-import", if (settings.autoImport) "On (while the vault is open)" else "Off")
+                StatusLine("Auto-import", if (settings.autoImport) "On (scans while the vault is open)" else "Off")
                 StatusLine(
                     "Fingerprint",
                     when {
@@ -237,14 +247,31 @@ fun SettingsScreen(
             Section("Existing photos") {
                 val importStatus by ExistingImport.status.collectAsState()
                 Text(
-                    "Copies every photo and video already in your gallery into the vault, oldest first, in small batches. " +
-                        "Originals stay in your gallery, unencrypted.",
+                    "Compares every photo and video on the phone with the vault by content hash, and adds only the ones the vault " +
+                        "does not have. Originals stay in your gallery, unencrypted.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                ActionRow("Import existing", importStatus ?: "Not started.", "Start") {
+                ActionRow(
+                    "Delete originals already in vault",
+                    "Removes gallery copies whose content the vault already holds. Android asks you to confirm.",
+                    "Delete",
+                ) {
+                    scope.launch {
+                        val deletable = withContext(Dispatchers.IO) { MediaTransfer.verifiedOriginalUris(context, ExistingImport.inVaultUris(context)) }
+                        if (deletable.isEmpty()) {
+                            snackbar.showSnackbar("No gallery originals to delete. Run a scan first, or none are verified in the vault.")
+                            return@launch
+                        }
+                        SessionManager.suppressNextStopLock = true
+                        deleteOriginals.launch(
+                            IntentSenderRequest.Builder(MediaStore.createDeleteRequest(context.contentResolver, deletable).intentSender).build(),
+                        )
+                    }
+                }
+                ActionRow("Add missing from phone", importStatus ?: "Not started.", "Scan") {
                     if (AutoImport.granted(context)) {
-                        ExistingImport.start(context, settings)
+                        ExistingImport.start(context, force = true)
                     } else {
                         existingPermission.launch(AutoImport.permissions())
                     }
@@ -340,13 +367,16 @@ fun SettingsScreen(
                 HorizontalDivider()
                 SwitchRow(
                     "Import new photos automatically",
-                    "While the vault is open, new photos and videos are copied in. Originals stay in your gallery, unencrypted. " +
-                        "After each import you can delete them with one tap.",
+                    "On by default. While the vault is open, photos and videos missing from the vault are copied in. " +
+                        "Originals stay in your gallery, unencrypted. After each scan you can delete them with one tap.",
                     settings.autoImport,
                 ) { on ->
                     when {
-                        !on -> settings.putAutoImport(false, 0)
-                        AutoImport.granted(context) -> settings.putAutoImport(true, System.currentTimeMillis() / 1000)
+                        !on -> settings.putAutoImport(false)
+                        AutoImport.granted(context) -> {
+                            settings.putAutoImport(true)
+                            ExistingImport.start(context, force = true)
+                        }
                         else -> mediaPermission.launch(AutoImport.permissions())
                     }
                 }

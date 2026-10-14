@@ -18,7 +18,7 @@ Map of what the app does, what runs **automatically** and what the user does **m
 | Recovery | Recovery file re-check reminder every 90 days | `ui/settings/SettingsStatus.kt` `RecoveryReminder`, ADR-012 | Done |
 | Import | Picker → stage → encrypt → thumbnail, dedup by content hash | `media/MediaTransfer.kt`, `work/ImportWorker.kt` | Done |
 | Import | Size cap 500 MB; non-photo/video refused | `MediaTransfer.MAX_IMPORT_BYTES` | Done |
-| Import | Auto-import new gallery photos and videos while the vault is open (opt-in, read permission, ADR-013) | `media/AutoImport.kt`, `MainActivity.kt` (`galleryObserver`), Settings → Privacy | Done (device run pending) |
+| Import | Gallery scan by content hash, on by default: adds photos and videos the vault lacks when it opens, on gallery change, and on the Settings "Scan" button (ADR-016) | `media/ExistingImport.kt`, `media/ScanCache.kt`, `ui/MainScaffold.kt`, `MainActivity.kt`, Settings → Privacy | Done (device run pending) |
 | Library | Timeline grid, Select mode, filters, time range, sort | `ui/library/*`, `ui/library/Timeline.kt` | Done |
 | Viewer | Zoom, swipe, video playback (segment decrypt), slideshow, info sheet | `ui/viewer/ViewerScreen.kt`, `media/VaultPlayer.kt` | Done |
 | Edit | Rotate, flip, crop, 5 filters, brightness/contrast/saturation → new JPEG | `ui/viewer/EditScreen.kt`, `media/ImageEdits.kt` | Done (original never changed) |

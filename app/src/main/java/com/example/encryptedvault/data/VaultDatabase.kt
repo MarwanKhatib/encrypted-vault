@@ -80,6 +80,10 @@ interface PhotoDao {
     @Query("SELECT * FROM photos WHERE hash = :hash AND status = 'complete' LIMIT 1")
     suspend fun findCompleteByHash(hash: String): PhotoEntity?
 
+    /** Every content hash that has a complete vault copy. A gallery scan compares against this set. */
+    @Query("SELECT hash FROM photos WHERE status = 'complete'")
+    suspend fun completeHashes(): List<String>
+
     /** Live list of every completed item, newest first. Emits again whenever the table changes. */
     @Query("SELECT * FROM photos WHERE status = 'complete' ORDER BY timestamp DESC")
     fun observeCompleted(): Flow<List<PhotoEntity>>
