@@ -60,12 +60,17 @@ object UpdateController {
     /** Asks GitHub for the latest release and updates [state]. */
     suspend fun check() {
         stateFlow.value = State.Checking
-        val release = withContext(Dispatchers.IO) { ReleaseFeed.fetchLatest() }
         stateFlow.value =
-            when {
-                release == null -> State.Failed("Could not reach GitHub. Check the connection and try again.")
-                UpdateRules.isNewer(BuildConfig.VERSION_NAME, release.tag) -> State.Available(release)
-                else -> State.UpToDate
+            when (val lookup = withContext(Dispatchers.IO) { ReleaseFeed.lookupLatest() }) {
+                is ReleaseFeed.Lookup.Found ->
+                    if (UpdateRules.isNewer(BuildConfig.VERSION_NAME, lookup.release.tag)) {
+                        State.Available(lookup.release)
+                    } else {
+                        State.UpToDate
+                    }
+                ReleaseFeed.Lookup.NoRelease ->
+                    State.Failed("No public release found. The repository must be public and have a published release.")
+                is ReleaseFeed.Lookup.Failed -> State.Failed("Update check failed: ${lookup.reason}.")
             }
     }
 

@@ -43,8 +43,42 @@ object ReleaseFeed {
         return Release(tag, apk, sha)
     }
 
-    /** The latest release, or null when offline, rate-limited, or the repo has no release. */
-    fun fetchLatest(): Release? = httpGet(LATEST)?.let(::parseLatest)
+    /** What GitHub said about the latest release, with the reason when there is no usable answer. */
+    sealed interface Lookup {
+        /** A release with both assets. */
+        data class Found(
+            val release: Release,
+        ) : Lookup
+
+        /** HTTP 404: the repository is private, or it has no published release yet. */
+        data object NoRelease : Lookup
+
+        /** Offline, rate-limited, or an answer the app cannot use; [reason] says which. */
+        data class Failed(
+            val reason: String,
+        ) : Lookup
+    }
+
+    /** Asks GitHub for the latest release and reports exactly why it could not, so Settings can say what to fix. */
+    fun lookupLatest(): Lookup {
+        val conn = open(LATEST) ?: return Lookup.Failed("connection refused")
+        return try {
+            when (val code = conn.responseCode) {
+                HttpURLConnection.HTTP_OK -> {
+                    val body = conn.inputStream.bufferedReader().use { it.readText() }
+                    parseLatest(body)?.let { Lookup.Found(it) } ?: Lookup.Failed("the release lacks app-release.apk or its .sha256")
+                }
+                HttpURLConnection.HTTP_NOT_FOUND -> Lookup.NoRelease
+                else -> Lookup.Failed("GitHub answered HTTP $code")
+            }
+        } catch (e: java.io.IOException) {
+            Lookup.Failed("no connection (${e.javaClass.simpleName})")
+        } catch (e: org.json.JSONException) {
+            Lookup.Failed("unreadable answer from GitHub (${e.message})")
+        } finally {
+            conn.disconnect()
+        }
+    }
 
     /** GET over HTTPS only. Null on any failure. */
     fun httpGet(url: String): String? =

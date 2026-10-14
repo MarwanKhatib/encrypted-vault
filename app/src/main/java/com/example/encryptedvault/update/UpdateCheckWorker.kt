@@ -32,7 +32,7 @@ class UpdateCheckWorker(
     params: WorkerParameters,
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        val release = ReleaseFeed.fetchLatest() ?: return Result.success()
+        val release = (ReleaseFeed.lookupLatest() as? ReleaseFeed.Lookup.Found)?.release ?: return Result.success()
         if (UpdateRules.isNewer(BuildConfig.VERSION_NAME, release.tag)) notify(applicationContext, release.tag)
         return Result.success()
     }
