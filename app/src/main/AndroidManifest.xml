@@ -7,10 +7,14 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-    <!-- Deliberately NO INTERNET permission: the app is offline by design. Third-party libraries must not
-         add it back; the line below strips it from the merged manifest if one ever tries. -->
-    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+    <!-- INTERNET is used only to check GitHub for a newer release and download it (ADR-015). Nothing else talks to the network;
+         libraries must not add other network use. Photos and keys never leave the phone. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Installing a downloaded update (Android asks the user once per source, then confirms each install). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Notification when a newer release exists (Android 13+ asks at runtime). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- SECURITY-CRITICAL (Gap 1): allowBackup=false keeps the vault out of Google cloud / adb backup.
          Do NOT "clean up". Verify: adb backup -f test.ab com.example.encryptedvault -->
@@ -74,6 +78,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity-alias>
+
+        <!-- Gets the result of the update install (success, failure, or the system confirm prompt). Not exported. -->
+        <receiver
+            android:name=".update.InstallResultReceiver"
+            android:exported="false" />
 
         <!-- Temporary decrypted copies for sharing; cache/share is wiped on lock and on the next start. -->
         <provider

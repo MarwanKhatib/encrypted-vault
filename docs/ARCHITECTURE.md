@@ -70,7 +70,7 @@ Pure logic used by the screens (and covered by unit tests): `Timeline` (grouping
 
 - Never add `fallbackToDestructiveMigration()`. Every schema bump needs a real `Migration` and a case in `DatabaseMigrationTest`.
 - Nothing sensitive goes in a clear-text DB column. Extend `PhotoMetadata` and bump `PhotoMetadataCodec.VERSION` instead.
-- Don't add the INTERNET permission. The manifest removes it from merged libraries (`tools:node="remove"`).
+- INTERNET is used only by `update/ReleaseFeed` (GitHub release check and download, ADR-015). Do not add network use elsewhere; libraries must not add INTERNET-dependent code paths.
 - Backup files are never sent anywhere by the app; the user chooses the destination through the system file picker.
 - The keystore and `keystore.properties` are outside version control. Release builds without them are signed with the debug key and must not be distributed.
 

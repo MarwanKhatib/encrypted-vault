@@ -9,7 +9,7 @@ Signature mismatches in this project:
 | Build | Key | Keeps data on update? |
 |---|---|---|
 | `debug` (Android Studio, `assembleDebug`) | `~/.android/debug.keystore` on that machine | Only with other debug builds from the same machine |
-| `release` with `keystore.properties` | `/home/u0/keys/vault-release.jks` | Yes, with the same keystore |
+| `release` with `keystore.properties` | the keystore file named in `keystore.properties` (kept outside the repo) | Yes, with the same keystore |
 | `release` without `keystore.properties` | debug key | Only with that machine's debug builds |
 
 Switching between a debug install and a release install therefore loses the vault. `scripts/device-checks.sh recents` used to do this on purpose; it no longer uninstalls.
@@ -39,7 +39,7 @@ gh release create v0.2.0 "$APK" app/build/outputs/apk/release/app-release.apk.sh
   --repo MarwanKhatib/encrypted-vault --title "Vault 0.2.0" --notes-file docs/RELEASE_NOTES_0.2.0.md
 ```
 
-The repo is private, so the release is visible only to collaborators with access.
+The repo is public (ADR-015). The in-app updater reads the **latest** release and needs exactly two assets, named `app-release.apk` and `app-release.apk.sha256`. Publishing a release makes it an update for every phone that checks. Test on the test phone first. Bump `versionCode` and `versionName` to match the tag (`v0.3.0` → `versionName = "0.3.0"`).
 
 ## Installing a release
 

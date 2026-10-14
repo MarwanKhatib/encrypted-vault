@@ -30,6 +30,7 @@ Map of what the app does, what runs **automatically** and what the user does **m
 | Restore | Restore to original gallery folder (fallback `Restored/<folder>`) | `media/MediaTransfer.restoreToGallery`, `media/RestoreTarget.kt` | Done |
 | Share | Re-encrypt copy to cache, GPS strip toggle, temp swept on lock | `media/MediaTransfer.kt`, `MainActivity.lockNow` | Done (share flow not driven on device) |
 | Backup | Encrypted single-file backup (PBKDF2, AES-GCM 1 MiB chunks, format v2) | `backup/VaultBackup.kt`, `crypto/BackupCrypto.kt` | Done |
+| Update | Daily check of GitHub releases with a notification; Settings → Updates downloads, verifies (SHA-256 and signer), and asks Android to install. Vault kept (ADR-015) | `update/*`, `ui/settings/SettingsScreen.kt` | Done (device run pending) |
 | Backup | Password-protected zip (AES-256) wrapping the encrypted backup; move to another phone, restore with the same password (ADR-014) | `backup/ZipBackup.kt`, `ui/settings/BackupControls.kt` | Done (device run pending) |
 | Export | Plain unencrypted export + `manifest.csv` (warns first) | `backup/PlainExport.kt`, ADR-008 | Done (HEIC/PNG location not stripped, gap G3) |
 | Disguise | Launcher icon: Weather, Calculator, Notes, Clock | `appicon/AppIcon.kt` | Done (no fake app screen) |
@@ -151,7 +152,7 @@ flowchart LR
 
 | ID | Gap | Impact | Source | Needed |
 |---|---|---|---|---|
-| G1 | Not run on a real phone (Pixel 5 `15261FDD40022Q` now available) | Hardware-backed keys, split-screen, recents, share flow unverified | README, DESIGN_v5 #5–8 | Run `scripts/device-checks.sh` + manual checks on Pixel 5 |
+| G1 | Not run on a real phone (test phone, Pixel 5, now available) | Hardware-backed keys, split-screen, recents, share flow unverified | README, DESIGN_v5 #5–8 | Run `scripts/device-checks.sh` + manual checks on Pixel 5 |
 | G2 | Intruder capture (ADR-009) not built; intruder log (times) is built | No photo on wrong PIN | ADR-009, ADR-012 | Encrypted capture while locked, Camera2, real phone |
 | G3 | Plain export strips location only from JPEG | HEIC/PNG copies keep GPS | ADR-008 | Extend `PlainExport` strip |
 | G4 | Trash purge: daily WorkManager job added (fix in code, device run pending) | Expired items removed within ~1 day | `work/TrashPurgeWorker.kt` | Close after device check |

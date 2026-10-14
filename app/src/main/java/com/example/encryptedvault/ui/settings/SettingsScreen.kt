@@ -33,6 +33,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -60,6 +61,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.encryptedvault.BuildConfig
 import com.example.encryptedvault.VaultApp
 import com.example.encryptedvault.appicon.AppIcon
 import com.example.encryptedvault.appicon.AppIconManager
@@ -73,6 +75,7 @@ import com.example.encryptedvault.security.Biometric
 import com.example.encryptedvault.security.Biometric.findActivity
 import com.example.encryptedvault.ui.auth.MIN_PIN
 import com.example.encryptedvault.ui.auth.PinField
+import com.example.encryptedvault.update.UpdateController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -353,13 +356,49 @@ fun SettingsScreen(
                 }
             }
 
+            Section("Updates") {
+                val updateState by UpdateController.state.collectAsState()
+                Text(
+                    "Installed ${BuildConfig.VERSION_NAME}. Updates come from GitHub. Android asks you to confirm each install; your vault is kept.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                when (val s = updateState) {
+                    UpdateController.State.Idle -> {
+                        ActionRow("Check for updates", "Looks for a newer release on GitHub.", "Check") {
+                            scope.launch { UpdateController.check() }
+                        }
+                    }
+                    UpdateController.State.Checking -> Text("Checking…", style = MaterialTheme.typography.bodySmall)
+                    UpdateController.State.UpToDate -> Text("You have the latest version.", style = MaterialTheme.typography.bodySmall)
+                    is UpdateController.State.Available -> {
+                        ActionRow(
+                            "Version ${s.release.tag} is available",
+                            "Downloads the APK, checks its checksum and signer, then asks Android to install.",
+                            "Update",
+                        ) {
+                            scope.launch { UpdateController.updateTo(context, s.release) }
+                        }
+                    }
+                    is UpdateController.State.Downloading -> {
+                        LinearProgressIndicator(progress = { s.progress }, modifier = Modifier.fillMaxWidth())
+                        Text("Downloading ${(s.progress * 100).toInt()}%", style = MaterialTheme.typography.bodySmall)
+                    }
+                    UpdateController.State.Installing -> Text("Waiting for Android to confirm the install…", style = MaterialTheme.typography.bodySmall)
+                    is UpdateController.State.Failed -> {
+                        Text(s.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        ActionRow("Try again", "", "Check") { scope.launch { UpdateController.check() } }
+                    }
+                }
+            }
+
             Section("About") {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.primary)
                     Column {
-                        Text("Vault 0.2.0", style = MaterialTheme.typography.titleSmall)
+                        Text("Vault ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "AES-256-GCM · fully offline · no INTERNET permission",
+                            "AES-256-GCM · offline except update checks · no analytics",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

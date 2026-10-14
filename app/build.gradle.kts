@@ -34,8 +34,8 @@ android {
         applicationId = "com.example.encryptedvault"
         minSdk = 28 // ImageDecoder (HEIC), StrongBox
         targetSdk = 34
-        versionCode = 2 // bump on every release; Android refuses to install an older versionCode over a newer one
-        versionName = "0.2.0"
+        versionCode = 3 // bump on every release; Android refuses to install an older versionCode over a newer one
+        versionName = "0.3.0" // must match the release tag (v0.3.0); the updater compares it with the latest tag
         ksp { arg("room.schemaLocation", "$projectDir/schemas") }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -100,6 +100,8 @@ dependencies {
     implementation("androidx.media3:media3-transformer:1.3.1")
 
     testImplementation("junit:junit:4.13.2")
+    // Android ships org.json; the JVM unit tests need the same API to check ReleaseFeed.parseLatest.
+    testImplementation("org.json:json:20240303")
 
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test:runner:1.5.2")

@@ -1,11 +1,11 @@
 # Encrypted Photo Vault
 
-An offline Android vault for photos and videos, written in Kotlin with Jetpack Compose. Everything is encrypted on the device, and the app has **no INTERNET permission**: the manifest removes it even if a library requests it.
+An Android vault for photos and videos, written in Kotlin with Jetpack Compose. Everything is encrypted on the device. The app uses the network only to check GitHub for a newer release and download it (ADR-015); photos and keys never leave the phone, and no library may add other network use.
 
 **Status:** tested on an emulator (unit, instrumented, and device scripts). It has not yet run on a physical phone. Read the known limits below before trusting it with photos you cannot lose.
 
 - Design decisions and the security gap analysis: [`docs/DESIGN_v5.md`](docs/DESIGN_v5.md) (per-gap status and the device checklist).
-- Decision records: [`docs/decisions/`](docs/decisions) (ADR-001 native Kotlin, ADR-002 streaming AEAD, ADR-003 duress PIN, ADR-004 PIN wrapper, ADR-005 face features removed, ADR-006 release hardening, ADR-007 encrypted backup, ADR-011 cyber visual design; ADR-012 status panel, face-down lock, intruder log, recovery reminder; ADR-013 auto-import while open; ADR-014 password-protected zip backup; ADR-008 to 010: plain export, intruder capture, and optional idle lock (010 is implemented, 008 and 009 are proposals)).
+- Decision records: [`docs/decisions/`](docs/decisions) (ADR-001 native Kotlin, ADR-002 streaming AEAD, ADR-003 duress PIN, ADR-004 PIN wrapper, ADR-005 face features removed, ADR-006 release hardening, ADR-007 encrypted backup, ADR-011 cyber visual design; ADR-012 status panel, face-down lock, intruder log, recovery reminder; ADR-013 auto-import while open; ADR-014 password-protected zip backup; ADR-015 GitHub update check and install; ADR-008 to 010: plain export, intruder capture, and optional idle lock (010 is implemented, 008 and 009 are proposals)).
 - Code layout and how to extend it: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - Feature map, workflows, use cases, auto vs manual, open gaps: [`docs/FEATURES.md`](docs/FEATURES.md). Measured performance: [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md).
 

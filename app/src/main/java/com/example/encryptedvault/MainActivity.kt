@@ -31,6 +31,7 @@ import com.example.encryptedvault.security.Integrity
 import com.example.encryptedvault.security.SessionManager
 import com.example.encryptedvault.ui.VaultRoot
 import com.example.encryptedvault.ui.settings.AppSettings
+import com.example.encryptedvault.update.UpdateCheckWorker
 import com.example.encryptedvault.work.ImportWorker
 import com.example.encryptedvault.work.TrashPurgeWorker
 import kotlinx.coroutines.Dispatchers
@@ -55,6 +56,7 @@ class MainActivity : FragmentActivity() {
         settings = AppSettings(applicationContext)
         MediaTransfer.sweepTemporaryPlaintext(applicationContext, olderThanMs = 10 * 60_000L) // leftover share/playback plaintext
         TrashPurgeWorker.schedule(applicationContext)
+        UpdateCheckWorker.schedule(applicationContext)
         val words =
             assets
                 .open("bip39_english.txt")
