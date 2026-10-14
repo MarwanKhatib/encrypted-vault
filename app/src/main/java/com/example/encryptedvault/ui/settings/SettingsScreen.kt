@@ -1,5 +1,7 @@
 package com.example.encryptedvault.ui.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -64,6 +66,7 @@ import com.example.encryptedvault.crypto.KeyHierarchy
 import com.example.encryptedvault.crypto.PinPolicy
 import com.example.encryptedvault.crypto.UnlockAttempts
 import com.example.encryptedvault.data.VaultStorage
+import com.example.encryptedvault.media.AutoImport
 import com.example.encryptedvault.security.Biometric
 import com.example.encryptedvault.security.Biometric.findActivity
 import com.example.encryptedvault.ui.auth.MIN_PIN
@@ -92,6 +95,14 @@ fun SettingsScreen(
     var showDuress by remember { mutableStateOf(false) }
     var duressSet by remember { mutableStateOf(keys.hasDuressPin()) }
     var currentIcon by remember { mutableStateOf(AppIconManager.current(context)) }
+    val mediaPermission =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
+            if (results.values.all { it }) {
+                settings.putAutoImport(true, System.currentTimeMillis() / 1000)
+            } else {
+                scope.launch { snackbar.showSnackbar("Allow photo and video access to turn on auto-import") }
+            }
+        }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -121,6 +132,7 @@ fun SettingsScreen(
                     if (settings.idleLockMinutes == 0) "Off (locks when the app leaves the screen)" else "After ${settings.idleLockMinutes} min idle",
                 )
                 StatusLine("Face-down lock", if (settings.faceDownLock) "On (while the app is open)" else "Off")
+                StatusLine("Auto-import", if (settings.autoImport) "On (while the vault is open)" else "Off")
                 StatusLine(
                     "Fingerprint",
                     when {
@@ -295,6 +307,18 @@ fun SettingsScreen(
                     "Locks when the screen points at the floor while the app is open",
                     settings.faceDownLock,
                 ) { settings.putFaceDownLock(it) }
+                HorizontalDivider()
+                SwitchRow(
+                    "Import new photos automatically",
+                    "While the vault is open, new photos and videos are copied in. Originals stay in your gallery, unencrypted, until you delete them.",
+                    settings.autoImport,
+                ) { on ->
+                    when {
+                        !on -> settings.putAutoImport(false, 0)
+                        AutoImport.granted(context) -> settings.putAutoImport(true, System.currentTimeMillis() / 1000)
+                        else -> mediaPermission.launch(AutoImport.permissions())
+                    }
+                }
                 HorizontalDivider()
                 SwitchRow("Offer to delete originals", "After import, ask Android to delete the unencrypted originals", settings.offerDeleteOriginals) {
                     settings.putOfferDeleteOriginals(it)

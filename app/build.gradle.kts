@@ -34,8 +34,8 @@ android {
         applicationId = "com.example.encryptedvault"
         minSdk = 28 // ImageDecoder (HEIC), StrongBox
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2 // bump on every release; Android refuses to install an older versionCode over a newer one
+        versionName = "0.2.0"
         ksp { arg("room.schemaLocation", "$projectDir/schemas") }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

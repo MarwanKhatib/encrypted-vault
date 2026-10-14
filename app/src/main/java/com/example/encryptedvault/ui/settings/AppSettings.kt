@@ -27,6 +27,14 @@ class AppSettings(
     var idleLockMinutes by mutableIntStateOf(prefs.getInt("idle_lock_minutes", 0))
         private set
 
+    /** Copies new gallery photos and videos into the vault while it is open (ADR-013). Off by default. */
+    var autoImport by mutableStateOf(prefs.getBoolean("auto_import", false))
+        private set
+
+    /** Epoch seconds: gallery items added after this are auto-imported. Set when auto-import is turned on. */
+    var autoImportSince by mutableLongStateOf(prefs.getLong("auto_import_since", 0L))
+        private set
+
     /** Locks when the phone lies face down while the app is open (see FaceDown). */
     var faceDownLock by mutableStateOf(prefs.getBoolean("face_down_lock", false))
         private set
@@ -61,6 +69,26 @@ class AppSettings(
     fun putOfferDeleteOriginals(v: Boolean) {
         offerDeleteOriginals = v
         prefs.edit().putBoolean("offer_delete", v).apply()
+    }
+
+    /** Turns auto-import on (imports only items added from [nowSec] on) or off. Turning it off keeps the watermark. */
+    fun putAutoImport(
+        enabled: Boolean,
+        nowSec: Long,
+    ) {
+        autoImport = enabled
+        if (enabled) autoImportSince = nowSec
+        prefs
+            .edit()
+            .putBoolean("auto_import", enabled)
+            .putLong("auto_import_since", autoImportSince)
+            .apply()
+    }
+
+    /** Moves the auto-import watermark forward after a batch was queued (epoch seconds). */
+    fun putAutoImportSince(v: Long) {
+        autoImportSince = v
+        prefs.edit().putLong("auto_import_since", v).apply()
     }
 
     /** Stores the idle-lock timeout in minutes; 0 turns it off. */

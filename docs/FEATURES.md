@@ -18,6 +18,7 @@ Map of what the app does, what runs **automatically** and what the user does **m
 | Recovery | Recovery file re-check reminder every 90 days | `ui/settings/SettingsStatus.kt` `RecoveryReminder`, ADR-012 | Done |
 | Import | Picker → stage → encrypt → thumbnail, dedup by content hash | `media/MediaTransfer.kt`, `work/ImportWorker.kt` | Done |
 | Import | Size cap 500 MB; non-photo/video refused | `MediaTransfer.MAX_IMPORT_BYTES` | Done |
+| Import | Auto-import new gallery photos and videos while the vault is open (opt-in, read permission, ADR-013) | `media/AutoImport.kt`, `MainActivity.kt` (`galleryObserver`), Settings → Privacy | Done (device run pending) |
 | Library | Timeline grid, Select mode, filters, time range, sort | `ui/library/*`, `ui/library/Timeline.kt` | Done |
 | Viewer | Zoom, swipe, video playback (segment decrypt), slideshow, info sheet | `ui/viewer/ViewerScreen.kt`, `media/VaultPlayer.kt` | Done |
 | Edit | Rotate, flip, crop, 5 filters, brightness/contrast/saturation → new JPEG | `ui/viewer/EditScreen.kt`, `media/ImageEdits.kt` | Done (original never changed) |
@@ -39,7 +40,7 @@ Map of what the app does, what runs **automatically** and what the user does **m
 
 | Automatic (no user action) | Manual (user taps) |
 |---|---|
-| Encrypt, hash, dedup and thumbnail each imported file | Pick files to import |
+| Encrypt, hash, dedup and thumbnail each imported file | Pick files to import (or turn on auto-import, which then copies new gallery items while the vault is open) |
 | Resume an interrupted import batch after kill or reboot (WorkManager, APPEND chain `"import"`) | Choose whether to delete phone originals after import (prompted) |
 | Lock vault when app leaves screen, goes multi-window, or config changes | Lock now (⋯ menu) |
 | Lock after idle — **only if** enabled (default off) | Turn idle lock on (Settings → Privacy) |

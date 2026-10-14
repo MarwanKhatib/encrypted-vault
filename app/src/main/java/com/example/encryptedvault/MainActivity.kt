@@ -1,6 +1,7 @@
 package com.example.encryptedvault
 
 import android.content.res.Configuration
+import android.database.ContentObserver
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -9,13 +10,16 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.provider.MediaStore
 import android.util.Log
 import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
 import com.example.encryptedvault.crypto.Bip39
 import com.example.encryptedvault.crypto.KeyHierarchy
+import com.example.encryptedvault.media.AutoImport
 import com.example.encryptedvault.media.MediaTransfer
 import com.example.encryptedvault.security.FaceDown
 import com.example.encryptedvault.security.IdleLock
@@ -23,7 +27,11 @@ import com.example.encryptedvault.security.Integrity
 import com.example.encryptedvault.security.SessionManager
 import com.example.encryptedvault.ui.VaultRoot
 import com.example.encryptedvault.ui.settings.AppSettings
+import com.example.encryptedvault.work.ImportWorker
 import com.example.encryptedvault.work.TrashPurgeWorker
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** FragmentActivity (not ComponentActivity) because BiometricPrompt needs it. */
 class MainActivity : FragmentActivity() {
@@ -90,17 +98,40 @@ class MainActivity : FragmentActivity() {
             ) = Unit
         }
 
+    /** Gallery changes trigger auto-import (ADR-013). The callback checks the setting and that the vault is open. */
+    private val galleryObserver =
+        object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) = importNewItems()
+        }
+
+    /** Copies gallery items added since the watermark into the vault. Does nothing while the vault is locked or auto-import is off. */
+    private fun importNewItems() {
+        if (!settings.autoImport || VaultApp.sessionKey == null) return
+        lifecycleScope.launch(Dispatchers.IO) {
+            val since = settings.autoImportSince
+            val items = AutoImport.newItems(applicationContext, since).filterNot { MediaTransfer.exceedsLimit(applicationContext, it.first) }
+            if (items.isEmpty()) return@launch
+            val staged = items.mapNotNull { MediaTransfer.stage(applicationContext, it.first) }
+            ImportWorker.enqueueBatches(applicationContext, staged)
+            withContext(Dispatchers.Main) { settings.putAutoImportSince(AutoImport.nextWatermark(since, items.map { it.second })) }
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         idle.touch()
         idleHandler.postDelayed(idleCheck, IdleLock.CHECK_INTERVAL_MS)
         val sensors = getSystemService(SENSOR_SERVICE) as SensorManager
         sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { sensors.registerListener(faceDown, it, SensorManager.SENSOR_DELAY_UI) }
+        contentResolver.registerContentObserver(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, galleryObserver)
+        contentResolver.registerContentObserver(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, true, galleryObserver)
+        importNewItems()
     }
 
     override fun onPause() {
         idleHandler.removeCallbacks(idleCheck)
         (getSystemService(SENSOR_SERVICE) as SensorManager).unregisterListener(faceDown)
+        contentResolver.unregisterContentObserver(galleryObserver)
         super.onPause()
     }
 

@@ -109,9 +109,11 @@ flows() {
 recents() {
   say "release build: window must be FLAG_SECURE so recents shows no content"
   [ -f "$RELEASE_APK" ] || { echo "  build first: ./gradlew assembleRelease"; return 1; }
-  echo "  note: this replaces the debug install and erases its vault (release is signed with another key)"
-  "$ADB" uninstall "$PKG" >/dev/null 2>&1
-  "$ADB" install -r "$RELEASE_APK" >/dev/null
+  # No uninstall: it erases the vault. A different signing key makes install fail, and the vault is kept.
+  if ! "$ADB" install -r "$RELEASE_APK" >/dev/null; then
+    echo "  install refused: release is signed with a different key than the installed app. Nothing was erased (docs/RELEASE.md)."
+    return 1
+  fi
   "$ADB" shell am start -n "$PKG/.MainActivity" >/dev/null
   sleep 4
   "$ADB" shell input keyevent KEYCODE_APP_SWITCH

@@ -3,6 +3,10 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <!-- Only requested when the user turns on auto-import (ADR-013). Without it the app sees no gallery items. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <!-- Deliberately NO INTERNET permission: the app is offline by design. Third-party libraries must not
          add it back; the line below strips it from the merged manifest if one ever tries. -->
     <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
