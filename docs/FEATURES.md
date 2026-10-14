@@ -30,6 +30,7 @@ Map of what the app does, what runs **automatically** and what the user does **m
 | Restore | Restore to original gallery folder (fallback `Restored/<folder>`) | `media/MediaTransfer.restoreToGallery`, `media/RestoreTarget.kt` | Done |
 | Share | Re-encrypt copy to cache, GPS strip toggle, temp swept on lock | `media/MediaTransfer.kt`, `MainActivity.lockNow` | Done (share flow not driven on device) |
 | Backup | Encrypted single-file backup (PBKDF2, AES-GCM 1 MiB chunks, format v2) | `backup/VaultBackup.kt`, `crypto/BackupCrypto.kt` | Done |
+| Backup | Password-protected zip (AES-256) wrapping the encrypted backup; move to another phone, restore with the same password (ADR-014) | `backup/ZipBackup.kt`, `ui/settings/BackupControls.kt` | Done (device run pending) |
 | Export | Plain unencrypted export + `manifest.csv` (warns first) | `backup/PlainExport.kt`, ADR-008 | Done (HEIC/PNG location not stripped, gap G3) |
 | Disguise | Launcher icon: Weather, Calculator, Notes, Clock | `appicon/AppIcon.kt` | Done (no fake app screen) |
 | Storage | Room DB schema v5, migrations v1→v5 tested | `data/VaultDatabase.kt` | Done |

@@ -92,6 +92,8 @@ dependencies {
     ksp("androidx.room:room-compiler:2.6.1")
     // Audited streaming AEAD (AES-GCM-HKDF in 1 MiB segments): constant memory, tamper/truncation detection, seekable reads.
     implementation("com.google.crypto.tink:tink-android:1.13.0")
+    // Password-protected zip (AES-256) for the portable backup (ADR-014). Pure Java, so it also runs in JVM unit tests.
+    implementation("net.lingala.zip4j:zip4j:2.11.5")
     // Video playback straight from an encrypted DataSource, so no plaintext copy of a video is ever written to disk.
     implementation("androidx.media3:media3-exoplayer:1.3.1")
     implementation("androidx.media3:media3-ui:1.3.1")

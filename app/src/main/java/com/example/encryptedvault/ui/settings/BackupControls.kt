@@ -28,8 +28,11 @@ import androidx.compose.ui.unit.dp
 import com.example.encryptedvault.VaultApp
 import com.example.encryptedvault.backup.PlainExport
 import com.example.encryptedvault.backup.VaultBackup
+import com.example.encryptedvault.backup.ZipBackup
 import com.example.encryptedvault.crypto.BackupCrypto
 import kotlinx.coroutines.launch
+import net.lingala.zip4j.exception.ZipException
+import java.io.File
 import java.io.IOException
 import java.time.LocalDate
 
@@ -42,6 +45,10 @@ internal fun BackupRows(onMessage: (String) -> Unit) {
     var pendingRestore by remember { mutableStateOf<Uri?>(null) }
     val createFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { pendingExport = it }
     val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { pendingRestore = it }
+    var pendingZipExport by remember { mutableStateOf<Uri?>(null) }
+    var pendingZipRestore by remember { mutableStateOf<Uri?>(null) }
+    val createZip = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { pendingZipExport = it }
+    val openZip = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { pendingZipRestore = it }
     var showPlainWarning by remember { mutableStateOf(false) }
     val pickFolder =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -59,6 +66,18 @@ internal fun BackupRows(onMessage: (String) -> Unit) {
         "Adds the items from a backup file to this vault. Items already here are skipped.",
         "Restore",
     ) { openFile.launch(arrayOf("*/*")) }
+    HorizontalDivider()
+    ActionRow(
+        "Export zip backup",
+        "One password-protected zip with every photo and video. Copy it to another phone and restore it there with the same password.",
+        "Export",
+    ) { createZip.launch("evault-backup-${LocalDate.now()}.zip") }
+    HorizontalDivider()
+    ActionRow(
+        "Restore zip backup",
+        "Opens a zip backup from another phone or this one. Enter the same password. Items already here are skipped.",
+        "Restore",
+    ) { openZip.launch(arrayOf("application/zip", "application/octet-stream")) }
     HorizontalDivider()
     ActionRow(
         "Export plain copies",
@@ -105,6 +124,83 @@ internal fun BackupRows(onMessage: (String) -> Unit) {
             pendingRestore = null
             scope.launch { onMessage(restoreFrom(context, uri, passphrase)) }
         }
+    }
+    pendingZipExport?.let { uri ->
+        PassphraseDialog(
+            title = "Set the zip password",
+            creating = true,
+            onDismiss = { pendingZipExport = null },
+        ) { password ->
+            pendingZipExport = null
+            scope.launch { onMessage(zipExportTo(context, uri, password)) }
+        }
+    }
+    pendingZipRestore?.let { uri ->
+        PassphraseDialog(
+            title = "Enter the zip password",
+            creating = false,
+            onDismiss = { pendingZipRestore = null },
+        ) { password ->
+            pendingZipRestore = null
+            scope.launch { onMessage(zipRestoreFrom(context, uri, password)) }
+        }
+    }
+}
+
+/** Writes a password-protected zip holding the encrypted backup, copies it to [uri] and returns the message. */
+private suspend fun zipExportTo(
+    context: Context,
+    uri: Uri,
+    password: CharArray,
+): String {
+    val work =
+        File(context.cacheDir, "zip-backup").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+    return try {
+        if (VaultApp.sessionKey == null) return "Unlock the vault before exporting."
+        val evbk = File(work, "backup.evbk")
+        val count = evbk.outputStream().use { VaultBackup.export(context, password.copyOf(), it) }
+        val zip = File(work, "backup.zip")
+        ZipBackup.write(evbk, zip, password)
+        val out = context.contentResolver.openOutputStream(uri) ?: return "Couldn't open the file for writing."
+        out.use { zip.inputStream().use { input -> input.copyTo(it) } }
+        "Zip backup written: $count item(s). Keep the password safe; it cannot be recovered."
+    } catch (e: IOException) {
+        "Zip export failed: ${e.message ?: "the file could not be written"}."
+    } finally {
+        work.deleteRecursively()
+        password.fill('\u0000')
+    }
+}
+
+/** Copies the zip at [uri] to the cache, opens it with [password] and restores the backup inside. Cleans up the cache afterwards. */
+private suspend fun zipRestoreFrom(
+    context: Context,
+    uri: Uri,
+    password: CharArray,
+): String {
+    val work =
+        File(context.cacheDir, "zip-restore").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+    return try {
+        if (VaultApp.sessionKey == null) return "Unlock the vault before restoring."
+        val zip = File(work, "in.zip")
+        val input = context.contentResolver.openInputStream(uri) ?: return "Couldn't open the file."
+        input.use { source -> zip.outputStream().use { source.copyTo(it) } }
+        val evbk = ZipBackup.read(zip, password, work)
+        val report = evbk.inputStream().use { VaultBackup.restore(context, password.copyOf(), it) }
+        "Restored ${report.imported}, skipped ${report.skipped} already here, failed ${report.failed}."
+    } catch (e: ZipException) {
+        "Wrong password or damaged zip: ${e.message ?: "unknown error"}."
+    } catch (e: IOException) {
+        "Zip restore failed: ${e.message ?: "damaged file"}."
+    } finally {
+        work.deleteRecursively()
+        password.fill('\u0000')
     }
 }
 

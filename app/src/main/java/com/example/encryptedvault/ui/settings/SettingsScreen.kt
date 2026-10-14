@@ -44,6 +44,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -67,6 +68,7 @@ import com.example.encryptedvault.crypto.PinPolicy
 import com.example.encryptedvault.crypto.UnlockAttempts
 import com.example.encryptedvault.data.VaultStorage
 import com.example.encryptedvault.media.AutoImport
+import com.example.encryptedvault.media.ExistingImport
 import com.example.encryptedvault.security.Biometric
 import com.example.encryptedvault.security.Biometric.findActivity
 import com.example.encryptedvault.ui.auth.MIN_PIN
@@ -101,6 +103,14 @@ fun SettingsScreen(
                 settings.putAutoImport(true, System.currentTimeMillis() / 1000)
             } else {
                 scope.launch { snackbar.showSnackbar("Allow photo and video access to turn on auto-import") }
+            }
+        }
+    val existingPermission =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
+            if (results.values.all { it }) {
+                ExistingImport.start(context, settings)
+            } else {
+                scope.launch { snackbar.showSnackbar("Allow photo and video access to import existing photos") }
             }
         }
 
@@ -218,6 +228,23 @@ fun SettingsScreen(
                     Text("None recorded.", style = MaterialTheme.typography.bodySmall)
                 } else {
                     log.forEach { Text(dateFormat.format(Date(it)), style = MaterialTheme.typography.bodySmall) }
+                }
+            }
+
+            Section("Existing photos") {
+                val importStatus by ExistingImport.status.collectAsState()
+                Text(
+                    "Copies every photo and video already in your gallery into the vault, oldest first, in small batches. " +
+                        "Originals stay in your gallery, unencrypted.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                ActionRow("Import existing", importStatus ?: "Not started.", "Start") {
+                    if (AutoImport.granted(context)) {
+                        ExistingImport.start(context, settings)
+                    } else {
+                        existingPermission.launch(AutoImport.permissions())
+                    }
                 }
             }
 
